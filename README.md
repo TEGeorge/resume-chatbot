@@ -17,3 +17,57 @@ Build a system that analyzes resumes against job descriptions. Upload a resume a
 ## Systems Diagram
 
 [Excalidraw: resume-chatbot](https://excalidraw.com/resume-chatbot)
+
+## Development
+
+Built using Typescript, with React for the frontend and Hono for the backend. SQLite for the database and TBD on the AI provider.
+
+# Frontend
+
+Simple React chat frontend, using Shadcn/UI components with Tanstack for rapid development.
+
+Setup and run (from `frontend/`, with the backend running):
+
+```bash
+cp .env.example .env   # same Basic Auth credentials as backend/.env
+pnpm install
+pnpm dev               # http://localhost:5173
+```
+
+The Vite dev server proxies `/api/*` to the backend (`http://localhost:3000`, override with `API_URL`) and attaches the Basic Auth credentials, so they never reach the browser. API calls use the typed Hono RPC client in `src/lib/api.ts`.
+
+# Backend
+
+Hono used for a lightweight, edge supported runtime. Using Drizzle for the ORM with SQLite to keep the environment simple, Hono basic auth and TBD on AI provider.
+
+Setup and run (from `backend/`):
+
+```bash
+cp .env.example .env   # Basic Auth credentials
+pnpm install
+pnpm dev               # http://localhost:3000
+```
+
+- API docs: Swagger UI at `/swagger`, OpenAPI spec at `/doc`.
+- Hono RPC: the frontend can import `AppType` from `backend/src/app.ts`.
+
+## Database
+
+Schema lives in `backend/src/db/schema.ts`. Migrations are Drizzle SQL files in `backend/drizzle/` and are committed.
+
+```bash
+pnpm db:generate                     # generate a migration after changing the schema
+pnpm db:generate --name add_messages # same, with a custom name: 0001_add_messages.sql
+pnpm db:migrate                      # apply pending migrations manually (drizzle-kit)
+```
+
+Pending migrations are also applied automatically on server startup, so `pnpm dev` is enough for local work. The database file defaults to `backend/local.db`; set `DATABASE_URL` to change it.
+
+
+# Deployment
+
+Initially focusing on local environment only, but will attempt to natively support Cloudflare with reasonable abstractions.
+
+# Dev Log
+
+29 Sept: stand up initial chat interface, deciding between a custom chat interface and API design or adopting AI Elements. Driver for this decision is adopting Vercel AI SDK as the base for the AI Chat.
