@@ -1,14 +1,29 @@
-import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from 'ai'
+import { APICallError, convertToModelMessages, streamText, type UIMessage } from 'ai'
 import { asc, eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { describeRoute, resolver, validator } from 'hono-openapi'
+import { createOllama } from 'ollama-ai-provider-v2'
 import { z } from 'zod'
 import { db } from '../db/index.js'
 import { chats, messages } from '../db/schema.js'
 
-// No AI provider yet: every reply is this static message.
-const STATIC_REPLY =
-  'The AI provider is not connected yet, so this is a static reply. Your message was saved.'
+const baseURL = process.env.OLLAMA_BASE_URL
+const modelName = process.env.OLLAMA_MODEL
+
+if (!baseURL || !modelName) {
+  throw new Error('OLLAMA_BASE_URL and OLLAMA_MODEL must be set')
+}
+
+const ollama = createOllama({
+  baseURL,
+  headers: process.env.OLLAMA_API_KEY
+    ? { Authorization: `Bearer ${process.env.OLLAMA_API_KEY}` }
+    : undefined,
+})
+const model = ollama(modelName)
+
+const SYSTEM_PROMPT =
+  'You are a career intelligence assistant. Help the user understand how their resume fits job postings: fit, skill gaps, experience alignment, and interview preparation. Be specific and concise, and stay on topic.'
 
 // Only the parts are accepted: the role is always 'user' and the server assigns the id.
 const SendMessageSchema = z.object({
@@ -59,7 +74,7 @@ export const chatMessages = new Hono()
     describeRoute({
       tags: ['messages'],
       description:
-        'Send a user message and stream the assistant reply (AI SDK UI message stream over SSE). The reply is currently static.',
+        'Send a user message and stream the assistant reply (AI SDK UI message stream over SSE).',
       responses: {
         200: { description: 'text/event-stream' },
         400: { description: 'Invalid body' },
@@ -80,17 +95,23 @@ export const chatMessages = new Hono()
         parts: parts as UIMessage['parts'],
       })
 
-      // Full history, including the message just saved. Pass it to the model
-      // (convertToModelMessages) once a provider is added.
       const history = await loadMessages(chatId)
 
-      const stream = createUIMessageStream({
+      const result = streamText({
+        model,
+        system: SYSTEM_PROMPT,
+        messages: await convertToModelMessages(history),
+        abortSignal: c.req.raw.signal,
+      })
+
+      return result.toUIMessageStreamResponse({
         originalMessages: history,
-        execute: ({ writer }) => {
-          const id = crypto.randomUUID()
-          writer.write({ type: 'text-start', id })
-          writer.write({ type: 'text-delta', id, delta: STATIC_REPLY })
-          writer.write({ type: 'text-end', id })
+        onError: (error) => {
+          console.error('chat stream failed', error)
+          if (APICallError.isInstance(error)) {
+            return `Model request failed (${error.statusCode ?? 'no status'}): ${error.responseBody ?? error.message}`
+          }
+          return 'The model could not be reached. Check OLLAMA_BASE_URL, OLLAMA_API_KEY and OLLAMA_MODEL.'
         },
         onFinish: async ({ responseMessage }) => {
           await db
@@ -104,7 +125,5 @@ export const chatMessages = new Hono()
             .onConflictDoNothing()
         },
       })
-
-      return createUIMessageStreamResponse({ stream })
     },
   )
