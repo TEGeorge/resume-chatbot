@@ -4,6 +4,7 @@ import { describeRoute, resolver, validator } from 'hono-openapi'
 import { z } from 'zod'
 import { db } from '../db/index.js'
 import { chats } from '../db/schema.js'
+import { chatMessages } from './messages.js'
 
 const CreateChatSchema = z.object({ name: z.string().trim().min(1).meta({ example: 'Job search' }) })
 
@@ -48,3 +49,4 @@ export const chat = new Hono()
       return c.json(created, 201)
     },
   )
+  .route('/:id/messages', chatMessages)

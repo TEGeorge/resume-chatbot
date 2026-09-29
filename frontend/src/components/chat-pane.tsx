@@ -1,5 +1,6 @@
 import { useChat } from '@ai-sdk/react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { DefaultChatTransport, type UIMessage } from 'ai'
 import {
   Conversation,
   ConversationContent,
@@ -26,8 +27,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import type { api } from '@/lib/api'
-import { mockTransport } from '@/lib/mock-transport'
+import { api } from '@/lib/api'
 
 type Chats = Awaited<ReturnType<Awaited<ReturnType<typeof api.chat.$get>>['json']>>
 
@@ -63,9 +63,53 @@ export function ChatPane({ chatId }: { chatId: string | null }) {
 }
 
 function ChatSession({ chatId }: { chatId: string }) {
-  const { messages, sendMessage, status, stop } = useChat({
+  const history = useQuery({
+    queryKey: ['messages', chatId],
+    queryFn: async () => {
+      const res = await api.chat[':id'].messages.$get({ param: { id: chatId } })
+      if (!res.ok) throw new Error('Failed to load messages')
+      return (await res.json()) as UIMessage[]
+    },
+    // history seeds useChat once; live updates come from the stream
+    staleTime: Infinity,
+    gcTime: 0,
+  })
+
+  if (history.isPending) {
+    return (
+      <CardContent className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+        Loading…
+      </CardContent>
+    )
+  }
+  if (history.isError) {
+    return (
+      <CardContent className="flex flex-1 items-center justify-center text-sm text-destructive">
+        Could not load messages.
+      </CardContent>
+    )
+  }
+
+  return <ChatSessionView chatId={chatId} initialMessages={history.data} />
+}
+
+function ChatSessionView({
+  chatId,
+  initialMessages,
+}: {
+  chatId: string
+  initialMessages: UIMessage[]
+}) {
+  const { messages, sendMessage, status, stop, error } = useChat({
     id: chatId,
-    transport: mockTransport,
+    messages: initialMessages,
+    transport: new DefaultChatTransport({
+      api: `/api/chat/${chatId}/messages`,
+      // the server owns the history and the message role/id; send only the new parts
+      prepareSendMessagesRequest: ({ messages }) => ({
+        body: { parts: messages.at(-1)!.parts },
+      }),
+    }),
   })
 
   return (
@@ -95,6 +139,11 @@ function ChatSession({ chatId }: { chatId: string }) {
           <ConversationScrollButton />
         </Conversation>
       </CardContent>
+      {error && (
+        <p className="px-4 pb-2 text-sm text-destructive">
+          Something went wrong sending that message.
+        </p>
+      )}
       <CardFooter>
         <PromptInput
           className="w-full"
