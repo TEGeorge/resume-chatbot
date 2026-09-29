@@ -30,6 +30,29 @@ Simple React chat frontend, using Shadcn/UI components with Tanstack for rapid d
 
 Hono used for a lightweight, edge supported runtime. Using Drizzle for the ORM with SQLite to keep the environment simple, Hono basic auth and TBD on AI provider.
 
+Setup and run (from `backend/`):
+
+```bash
+cp .env.example .env   # Basic Auth credentials
+pnpm install
+pnpm dev               # http://localhost:3000
+```
+
+- API docs: Swagger UI at `/swagger`, OpenAPI spec at `/doc`.
+- Hono RPC: the frontend can import `AppType` from `backend/src/app.ts`.
+
+## Database
+
+Schema lives in `backend/src/db/schema.ts`. Migrations are Drizzle SQL files in `backend/drizzle/` and are committed.
+
+```bash
+pnpm db:generate                     # generate a migration after changing the schema
+pnpm db:generate --name add_messages # same, with a custom name: 0001_add_messages.sql
+pnpm db:migrate                      # apply pending migrations manually (drizzle-kit)
+```
+
+Pending migrations are also applied automatically on server startup, so `pnpm dev` is enough for local work. The database file defaults to `backend/local.db`; set `DATABASE_URL` to change it.
+
 
 # Deployment
 

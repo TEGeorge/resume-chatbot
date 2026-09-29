@@ -1,11 +1,8 @@
 import { serve } from '@hono/node-server'
-import { Hono } from 'hono'
+import { app } from './app.js'
+import { runMigrations } from './db/index.js'
 
-const app = new Hono()
-
-app.get('/', (c) => {
-  return c.text('Hello Hono!')
-})
+runMigrations()
 
 serve({
   fetch: app.fetch,
