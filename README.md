@@ -26,6 +26,16 @@ Built using Typescript, with React for the frontend and Hono for the backend. SQ
 
 Simple React chat frontend, using Shadcn/UI components with Tanstack for rapid development.
 
+Setup and run (from `frontend/`, with the backend running):
+
+```bash
+cp .env.example .env   # same Basic Auth credentials as backend/.env
+pnpm install
+pnpm dev               # http://localhost:5173
+```
+
+The Vite dev server proxies `/api/*` to the backend (`http://localhost:3000`, override with `API_URL`) and attaches the Basic Auth credentials, so they never reach the browser. API calls use the typed Hono RPC client in `src/lib/api.ts`.
+
 # Backend
 
 Hono used for a lightweight, edge supported runtime. Using Drizzle for the ORM with SQLite to keep the environment simple, Hono basic auth and TBD on AI provider.
@@ -57,3 +67,7 @@ Pending migrations are also applied automatically on server startup, so `pnpm de
 # Deployment
 
 Initially focusing on local environment only, but will attempt to natively support Cloudflare with reasonable abstractions.
+
+# Dev Log
+
+29 Sept: stand up initial chat interface, deciding between a custom chat interface and API design or adopting AI Elements. Driver for this decision is adopting Vercel AI SDK as the base for the AI Chat.
