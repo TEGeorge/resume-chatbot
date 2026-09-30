@@ -22,8 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useResumes } from '@/components/resume-library'
 import { api, errorMessage } from '@/lib/api'
+import { useJobs, useResumes } from '@/lib/queries'
 
 export function ChatList({
   selectedId,
@@ -35,7 +35,9 @@ export function ChatList({
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [resumeId, setResumeId] = useState<string | null>(null)
+  const [jobIds, setJobIds] = useState<string[]>([])
   const resumes = useResumes()
+  const jobs = useJobs()
 
   const chats = useQuery({
     queryKey: ['chats'],
@@ -47,13 +49,14 @@ export function ChatList({
   })
 
   const createChat = useMutation({
-    mutationFn: async (input: { name: string; resumeId: string }) => {
+    mutationFn: async (input: { name: string; resumeId: string; jobIds: string[] }) => {
       const res = await api.chat.$post({ json: input })
       if (!res.ok) throw new Error(await errorMessage(res, 'Could not create chat'))
       return res.json()
     },
     onSuccess: (chat) => {
       setName('')
+      setJobIds([])
       onSelect(chat.id)
       return queryClient.invalidateQueries({ queryKey: ['chats'] })
     },
@@ -64,7 +67,7 @@ export function ChatList({
       <CardHeader className="border-b">
         <CardTitle>Chats</CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 overflow-y-auto p-2">
+      <CardContent className="min-h-0 flex-1 overflow-y-auto p-2">
         {chats.isPending && (
           <p className="p-2 text-sm text-muted-foreground">Loading…</p>
         )}
@@ -94,7 +97,9 @@ export function ChatList({
           onSubmit={(e) => {
             e.preventDefault()
             const trimmed = name.trim()
-            if (trimmed && resumeId) createChat.mutate({ name: trimmed, resumeId })
+            if (trimmed && resumeId && jobIds.length > 0) {
+              createChat.mutate({ name: trimmed, resumeId, jobIds })
+            }
           }}
         >
           <Select
@@ -114,8 +119,36 @@ export function ChatList({
               ))}
             </SelectContent>
           </Select>
-          {resumes.data?.length === 0 && (
-            <p className="text-xs text-muted-foreground">Add a CV above to start a chat.</p>
+          <Select
+            multiple
+            items={(jobs.data ?? []).map((j) => ({ value: j.id, label: j.name }))}
+            value={jobIds}
+            onValueChange={setJobIds}
+            disabled={!jobs.data?.length}
+          >
+            <SelectTrigger className="w-full" aria-label="Jobs for this chat">
+              <SelectValue placeholder="Choose jobs">
+                {(selected: string[]) =>
+                  selected.length > 0
+                    ? selected
+                        .map((id, i) => `#${i + 1} ${jobs.data?.find((j) => j.id === id)?.name ?? ''}`)
+                        .join(', ')
+                    : 'Choose jobs'
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {jobs.data?.map((j) => (
+                <SelectItem key={j.id} value={j.id}>
+                  {j.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {(resumes.data?.length === 0 || jobs.data?.length === 0) && (
+            <p className="text-xs text-muted-foreground">
+              Add a CV and at least one job above to start a chat.
+            </p>
           )}
           <InputGroup>
             <InputGroupInput
@@ -130,7 +163,7 @@ export function ChatList({
                 type="submit"
                 variant="default"
                 size="icon-sm"
-                disabled={!name.trim() || !resumeId || createChat.isPending}
+                disabled={!name.trim() || !resumeId || jobIds.length === 0 || createChat.isPending}
               >
                 <PlusIcon />
                 <span className="sr-only">Create chat</span>

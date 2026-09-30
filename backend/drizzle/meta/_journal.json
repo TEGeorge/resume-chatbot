@@ -22,6 +22,13 @@
       "when": 1790800343858,
       "tag": "0002_add_resumes",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790801829346,
+      "tag": "0003_add_jobs",
+      "breakpoints": true
     }
   ]
 }

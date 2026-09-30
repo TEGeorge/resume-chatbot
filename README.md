@@ -56,9 +56,11 @@ Configuration (`backend/.env`):
 - API docs: Swagger UI at `/swagger`, OpenAPI spec at `/doc`.
 - Hono RPC: the frontend can import `AppType` from `backend/src/app.ts`.
 
-### CVs
+### CVs and jobs
 
-Every new chat is created against a CV from the CV library. Uploads accept PDF, DOCX, MD and TXT (max 5 MB), or pasted text. The text is extracted and stored, and only that text reaches the model. It goes into the system prompt, marked as user-supplied data so that instructions hidden in a CV are ignored. Scanned (image-only) PDFs are rejected, so paste the text instead. CVs cannot be edited: upload again to change one. A CV that a chat uses cannot be deleted. Chats created before CVs existed keep working without one.
+Every new chat is created with one CV and one or more job postings from the libraries. Both are uploaded the same way: PDF, DOCX, MD or TXT (max 5 MB), or pasted text. The text is extracted and stored, and only that text reaches the model. CVs are capped at 50,000 characters and job postings at 20,000 each, since several postings share one prompt.
+
+The CV and the jobs go into the system prompt, marked as user-supplied data so that instructions hidden inside them are ignored. Jobs are numbered in the order they were picked, so "Job #2" in a question means the second one chosen (the chat header shows the numbering). Scanned (image-only) PDFs are rejected, so paste the text instead. Documents cannot be edited: upload again to change one. A CV or job that a chat uses cannot be deleted. Chats created before these existed keep working without them.
 
 ## Database
 

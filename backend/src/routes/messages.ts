@@ -4,7 +4,7 @@ import { Hono } from 'hono'
 import { describeRoute, resolver, validator } from 'hono-openapi'
 import { z } from 'zod'
 import { db } from '../db/index.js'
-import { chats, messages, resumes } from '../db/schema.js'
+import { chatJobs, chats, jobs, messages, resumes } from '../db/schema.js'
 import { buildSystemPrompt } from '../lib/chat-context.js'
 import type { AppEnv } from '../services/index.js'
 
@@ -19,7 +19,7 @@ const MessageSchema = z.object({
   parts: z.array(z.record(z.string(), z.unknown())),
 })
 
-// The chat plus the CV it uses (null for chats created before CVs existed)
+// The chat plus its CV (null for chats created before CVs existed) and jobs in Job #1, #2, ... order
 async function getChat(chatId: string) {
   const [found] = await db
     .select({ id: chats.id, resumeName: resumes.name, resumeText: resumes.text })
@@ -27,7 +27,16 @@ async function getChat(chatId: string) {
     .leftJoin(resumes, eq(chats.resumeId, resumes.id))
     .where(eq(chats.id, chatId))
     .limit(1)
-  return found
+  if (!found) return undefined
+
+  const attached = await db
+    .select({ name: jobs.name, text: jobs.text })
+    .from(chatJobs)
+    .innerJoin(jobs, eq(chatJobs.jobId, jobs.id))
+    .where(eq(chatJobs.chatId, chatId))
+    .orderBy(asc(chatJobs.position))
+
+  return { ...found, jobs: attached }
 }
 
 async function loadMessages(chatId: string): Promise<UIMessage[]> {
@@ -91,15 +100,24 @@ export const chatMessages = new Hono<AppEnv>()
         chat.resumeName !== null && chat.resumeText !== null
           ? { name: chat.resumeName, text: chat.resumeText }
           : null,
+        chat.jobs,
       )
 
       const { ollama } = c.get('services')
       const result = await ollama.stream({ system, history, signal: c.req.raw.signal })
 
+      // Keep reading the model's output even if the browser goes away (reload, closed
+      // tab, Stop), so onFinish still runs and the reply is saved. Not awaited on purpose.
+      void result.consumeStream()
+
       return result.toUIMessageStreamResponse({
         originalMessages: history,
         onError: (error) => ollama.describeError(error),
         onFinish: async ({ responseMessage }) => {
+          // nothing to keep if the stream ended before any text arrived
+          const hasText = responseMessage.parts.some((p) => p.type === 'text' && p.text.length > 0)
+          if (!hasText) return
+
           await db
             .insert(messages)
             .values({

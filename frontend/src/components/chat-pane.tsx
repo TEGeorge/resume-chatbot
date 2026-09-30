@@ -44,7 +44,10 @@ export function ChatPane({ chatId }: { chatId: string | null }) {
         <CardDescription>
           {chat
             ? chat.resumeName
-              ? `Using CV: ${chat.resumeName}`
+              ? [
+                  `CV: ${chat.resumeName}`,
+                  ...chat.jobs.map((job, i) => `Job #${i + 1}: ${job.name}`),
+                ].join(' · ')
               : 'Ask about your resume and the jobs you are targeting.'
             : 'Create or pick a chat to get started.'}
         </CardDescription>
@@ -116,8 +119,8 @@ function ChatSessionView({
 
   return (
     <>
-      <CardContent className="flex-1 overflow-hidden p-0">
-        <Conversation>
+      <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+        <Conversation className="min-h-0">
           <ConversationContent>
             {messages.length === 0 ? (
               <ConversationEmptyState

@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { FileTextIcon, PlusIcon, Trash2Icon } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -21,75 +21,92 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import { api, errorMessage } from '@/lib/api'
+import { errorMessage } from '@/lib/api'
+import { cn } from '@/lib/utils'
 
-export function useResumes() {
-  return useQuery({
-    queryKey: ['resumes'],
-    queryFn: async () => {
-      const res = await api.resumes.$get()
-      if (!res.ok) throw new Error('Failed to load CVs')
-      return res.json()
-    },
-  })
+interface DocumentItem {
+  id: string
+  name: string
+  fileName: string | null
 }
 
-export function ResumeLibrary() {
+type AddForm = { file?: File; text?: string; name?: string }
+
+// A list of uploaded documents (CVs, job postings) with an add dialog and delete buttons
+export interface DocumentLibraryProps {
+  title: string
+  // singular, lowercase except for acronyms: 'CV', 'job'
+  noun: string
+  queryKey: string
+  documents: { data?: DocumentItem[]; isPending: boolean; isError: boolean }
+  add: (form: AddForm) => Promise<Response>
+  remove: (id: string) => Promise<Response>
+  className?: string
+}
+
+export function DocumentLibrary({
+  title,
+  noun,
+  queryKey,
+  documents,
+  add,
+  remove: removeRequest,
+  className,
+}: DocumentLibraryProps) {
   const queryClient = useQueryClient()
-  const resumes = useResumes()
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
-      const res = await api.resumes[':id'].$delete({ param: { id } })
+      const res = await removeRequest(id)
       if (!res.ok) {
         throw new Error(
           res.status === 409 ? 'Used by a chat' : await errorMessage(res, 'Could not delete'),
         )
       }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['resumes'] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [queryKey] }),
   })
 
   return (
-    <Card className="max-h-64 shrink-0 gap-0">
+    <Card className={cn('shrink-0 gap-0', className)}>
       <CardHeader className="flex-row items-center justify-between border-b">
-        <CardTitle>CVs</CardTitle>
-        <AddResumeDialog />
+        <CardTitle>{title}</CardTitle>
+        <AddDialog noun={noun} queryKey={queryKey} add={add} />
       </CardHeader>
-      <CardContent className="flex-1 overflow-y-auto p-2">
-        {resumes.isPending && (
+      <CardContent className="min-h-0 flex-1 overflow-y-auto p-2">
+        {documents.isPending && (
           <p className="p-2 text-sm text-muted-foreground">Loading…</p>
         )}
-        {resumes.isError && (
-          <p className="p-2 text-sm text-destructive">Could not load CVs.</p>
+        {documents.isError && (
+          <p className="p-2 text-sm text-destructive">Could not load {title}.</p>
         )}
-        {resumes.data?.length === 0 && (
+        {documents.data?.length === 0 && (
           <p className="p-2 text-sm text-muted-foreground">
-            No CVs yet. Add one to start a chat.
+            No {title} yet. Add one to start a chat.
           </p>
         )}
         <ul className="flex flex-col gap-1">
-          {resumes.data?.map((resume) => (
-            <li key={resume.id} className="rounded-lg px-2 py-1.5 text-sm hover:bg-muted">
+          {documents.data?.map((doc) => (
+            <li key={doc.id} className="rounded-lg px-2 py-1.5 text-sm hover:bg-muted">
               <div className="flex items-center gap-2">
                 <FileTextIcon className="size-4 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{resume.name}</div>
-                  {resume.fileName && (
-                    <div className="truncate text-xs text-muted-foreground">{resume.fileName}</div>
+                  <div className="truncate font-medium">{doc.name}</div>
+                  {doc.fileName && (
+                    <div className="truncate text-xs text-muted-foreground">{doc.fileName}</div>
                   )}
                 </div>
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label={`Delete ${resume.name}`}
-                  disabled={remove.isPending && remove.variables === resume.id}
-                  onClick={() => remove.mutate(resume.id)}
+                  aria-label={`Delete ${doc.name}`}
+                  disabled={remove.isPending && remove.variables === doc.id}
+                  onClick={() => remove.mutate(doc.id)}
                 >
                   <Trash2Icon />
                 </Button>
               </div>
-              {remove.isError && remove.variables === resume.id && (
+              {remove.isError && remove.variables === doc.id && (
                 <p className="pl-6 text-xs text-destructive">{remove.error.message}</p>
               )}
             </li>
@@ -100,7 +117,11 @@ export function ResumeLibrary() {
   )
 }
 
-function AddResumeDialog() {
+function AddDialog({
+  noun,
+  queryKey,
+  add,
+}: Pick<DocumentLibraryProps, 'noun' | 'queryKey' | 'add'>) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<'file' | 'text'>('file')
@@ -118,17 +139,15 @@ function AddResumeDialog() {
 
   const create = useMutation({
     mutationFn: async () => {
-      const res = await api.resumes.$post({
-        form: {
-          ...(mode === 'file' && file ? { file } : {}),
-          ...(mode === 'text' ? { text } : {}),
-          ...(name.trim() ? { name: name.trim() } : {}),
-        },
+      const res = await add({
+        ...(mode === 'file' && file ? { file } : {}),
+        ...(mode === 'text' ? { text } : {}),
+        ...(name.trim() ? { name: name.trim() } : {}),
       })
-      if (!res.ok) throw new Error(await errorMessage(res, 'Could not add CV'))
+      if (!res.ok) throw new Error(await errorMessage(res, `Could not add ${noun}`))
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['resumes'] })
+      await queryClient.invalidateQueries({ queryKey: [queryKey] })
       setOpen(false)
       reset()
     },
@@ -146,7 +165,7 @@ function AddResumeDialog() {
     >
       <DialogTrigger render={<Button variant="outline" size="sm" />}>
         <PlusIcon />
-        Add CV
+        Add {noun}
       </DialogTrigger>
       <DialogContent>
         <form
@@ -157,7 +176,7 @@ function AddResumeDialog() {
           }}
         >
           <DialogHeader>
-            <DialogTitle>Add a CV</DialogTitle>
+            <DialogTitle>Add a {noun}</DialogTitle>
             <DialogDescription>
               Upload a PDF, DOCX, Markdown or text file (max 5 MB), or paste the text.
             </DialogDescription>
@@ -172,7 +191,7 @@ function AddResumeDialog() {
               <Input
                 type="file"
                 accept=".pdf,.docx,.md,.txt"
-                aria-label="CV file"
+                aria-label={`${noun} file`}
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               />
             </TabsContent>
@@ -180,9 +199,9 @@ function AddResumeDialog() {
               <Textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder="Paste your CV text here"
-                aria-label="CV text"
-                className="min-h-40"
+                placeholder={`Paste the ${noun} text here`}
+                aria-label={`${noun} text`}
+                className="field-sizing-fixed h-56 resize-none overflow-y-auto"
               />
             </TabsContent>
           </Tabs>
@@ -193,7 +212,7 @@ function AddResumeDialog() {
               id="cv-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={mode === 'file' ? 'Defaults to the file name' : 'Pasted CV'}
+              placeholder={mode === 'file' ? 'Defaults to the file name' : `Pasted ${noun}`}
             />
           </div>
 
@@ -201,7 +220,7 @@ function AddResumeDialog() {
 
           <DialogFooter>
             <Button type="submit" disabled={!ready || create.isPending}>
-              {create.isPending ? 'Adding…' : 'Add CV'}
+              {create.isPending ? 'Adding…' : `Add ${noun}`}
             </Button>
           </DialogFooter>
         </form>

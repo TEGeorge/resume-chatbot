@@ -5,6 +5,7 @@ import { describeRoute, resolver, validator } from 'hono-openapi'
 import { z } from 'zod'
 import { db } from '../db/index.js'
 import { chats, resumes } from '../db/schema.js'
+import { DocumentFormSchema, readDocumentInput } from '../lib/document-input.js'
 import { ExtractError, MAX_UPLOAD_BYTES } from '../services/file-processing.js'
 import type { AppEnv } from '../services/index.js'
 
@@ -19,12 +20,6 @@ const ResumeSummarySchema = z.object({
 })
 
 const ResumeSchema = ResumeSummarySchema.omit({ preview: true }).extend({ text: z.string() })
-
-const CreateResumeSchema = z.object({
-  file: z.instanceof(File).optional(),
-  text: z.string().optional(),
-  name: z.string().trim().optional(),
-})
 
 const summaryColumns = {
   id: resumes.id,
@@ -100,35 +95,19 @@ export const resumeRoutes = new Hono<AppEnv>()
       maxSize: MAX_UPLOAD_BYTES,
       onError: (c) => c.json({ error: 'File too large (max 5 MB)' }, 413),
     }),
-    validator('form', CreateResumeSchema),
+    validator('form', DocumentFormSchema),
     async (c) => {
-      const { file, text, name } = c.req.valid('form')
       const { files } = c.get('services')
-      // an empty file input is submitted as a zero-byte file, so treat it as absent
-      const upload = file && file.size > 0 ? file : undefined
-      const pasted = text?.trim() ? text : undefined
 
-      if (!upload === !pasted) {
-        return c.json({ error: 'Send exactly one of file or text' }, 400)
-      }
-
-      let body: string
+      let input
       try {
-        body = upload ? await files.extractText(upload) : files.normalizeText(pasted!)
+        input = await readDocumentInput(files, c.req.valid('form'), { pastedName: 'Pasted CV' })
       } catch (error) {
         if (error instanceof ExtractError) return c.json({ error: error.message }, error.status)
         throw error
       }
 
-      const [created] = await db
-        .insert(resumes)
-        .values({
-          name: name || (upload ? upload.name.replace(/\.[^.]+$/, '') : 'Pasted CV'),
-          fileName: upload?.name ?? null,
-          mimeType: upload?.type || null,
-          text: body,
-        })
-        .returning()
+      const [created] = await db.insert(resumes).values(input).returning()
 
       return c.json(
         {
