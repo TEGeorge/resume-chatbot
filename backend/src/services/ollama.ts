@@ -15,16 +15,29 @@ export class OllamaService {
     this.numCtx = config.numCtx
   }
 
-  // Streams a reply to the conversation so far
-  async stream(input: { system: string; history: UIMessage[]; signal?: AbortSignal }) {
+  // Streams a reply to the conversation so far. `onFinish` runs once with the text produced,
+  // whether the reply completed or was aborted (stop, closed tab), even if nobody is still
+  // reading the response.
+  async stream(input: {
+    system: string
+    history: UIMessage[]
+    signal?: AbortSignal
+    onFinish?: (reply: { text: string; aborted: boolean }) => void | Promise<void>
+  }) {
     this.warnIfTooLong(input.system, input.history)
 
+    let text = ''
     return streamText({
       model: this.model,
       system: input.system,
       messages: await convertToModelMessages(input.history),
       providerOptions: this.numCtx ? { ollama: { options: { num_ctx: this.numCtx } } } : undefined,
       abortSignal: input.signal,
+      onChunk: ({ chunk }) => {
+        if (chunk.type === 'text-delta') text += chunk.text
+      },
+      onFinish: () => input.onFinish?.({ text, aborted: false }),
+      onAbort: () => input.onFinish?.({ text, aborted: true }),
     })
   }
 

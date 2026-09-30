@@ -104,30 +104,30 @@ export const chatMessages = new Hono<AppEnv>()
       )
 
       const { ollama } = c.get('services')
-      const result = await ollama.stream({ system, history, signal: c.req.raw.signal })
+      const result = await ollama.stream({
+        system,
+        history,
+        signal: c.req.raw.signal,
+        // saved from the model stream, not the response stream, so a reply survives the
+        // browser disconnecting (reload, closed tab, Stop)
+        onFinish: async ({ text }) => {
+          if (!text) return
+          await db.insert(messages).values({
+            id: crypto.randomUUID(),
+            chatId,
+            role: 'assistant',
+            parts: [{ type: 'text', text, state: 'done' }],
+          })
+        },
+      })
 
-      // Keep reading the model's output even if the browser goes away (reload, closed
-      // tab, Stop), so onFinish still runs and the reply is saved. Not awaited on purpose.
+      // Keep reading the model's output even if the browser goes away, so onFinish runs.
+      // Not awaited on purpose.
       void result.consumeStream()
 
       return result.toUIMessageStreamResponse({
         originalMessages: history,
         onError: (error) => ollama.describeError(error),
-        onFinish: async ({ responseMessage }) => {
-          // nothing to keep if the stream ended before any text arrived
-          const hasText = responseMessage.parts.some((p) => p.type === 'text' && p.text.length > 0)
-          if (!hasText) return
-
-          await db
-            .insert(messages)
-            .values({
-              id: responseMessage.id,
-              chatId,
-              role: 'assistant',
-              parts: responseMessage.parts,
-            })
-            .onConflictDoNothing()
-        },
       })
     },
   )
