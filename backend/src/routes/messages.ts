@@ -1,29 +1,12 @@
-import { APICallError, convertToModelMessages, streamText, type UIMessage } from 'ai'
+import type { UIMessage } from 'ai'
 import { asc, eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { describeRoute, resolver, validator } from 'hono-openapi'
-import { createOllama } from 'ollama-ai-provider-v2'
 import { z } from 'zod'
 import { db } from '../db/index.js'
-import { chats, messages } from '../db/schema.js'
-
-const baseURL = process.env.OLLAMA_BASE_URL
-const modelName = process.env.OLLAMA_MODEL
-
-if (!baseURL || !modelName) {
-  throw new Error('OLLAMA_BASE_URL and OLLAMA_MODEL must be set')
-}
-
-const ollama = createOllama({
-  baseURL,
-  headers: process.env.OLLAMA_API_KEY
-    ? { Authorization: `Bearer ${process.env.OLLAMA_API_KEY}` }
-    : undefined,
-})
-const model = ollama(modelName)
-
-const SYSTEM_PROMPT =
-  'You are a career intelligence assistant. Help the user understand how their resume fits job postings: fit, skill gaps, experience alignment, and interview preparation. Be specific and concise, and stay on topic.'
+import { chats, messages, resumes } from '../db/schema.js'
+import { buildSystemPrompt } from '../lib/chat-context.js'
+import type { AppEnv } from '../services/index.js'
 
 // Only the parts are accepted: the role is always 'user' and the server assigns the id.
 const SendMessageSchema = z.object({
@@ -36,9 +19,15 @@ const MessageSchema = z.object({
   parts: z.array(z.record(z.string(), z.unknown())),
 })
 
-async function chatExists(chatId: string) {
-  const [found] = await db.select({ id: chats.id }).from(chats).where(eq(chats.id, chatId)).limit(1)
-  return !!found
+// The chat plus the CV it uses (null for chats created before CVs existed)
+async function getChat(chatId: string) {
+  const [found] = await db
+    .select({ id: chats.id, resumeName: resumes.name, resumeText: resumes.text })
+    .from(chats)
+    .leftJoin(resumes, eq(chats.resumeId, resumes.id))
+    .where(eq(chats.id, chatId))
+    .limit(1)
+  return found
 }
 
 async function loadMessages(chatId: string): Promise<UIMessage[]> {
@@ -50,7 +39,7 @@ async function loadMessages(chatId: string): Promise<UIMessage[]> {
   return rows.map(({ id, role, parts }) => ({ id, role, parts }))
 }
 
-export const chatMessages = new Hono()
+export const chatMessages = new Hono<AppEnv>()
   .get(
     '/',
     describeRoute({
@@ -65,7 +54,7 @@ export const chatMessages = new Hono()
     }),
     async (c) => {
       const chatId = c.req.param('id')!
-      if (!(await chatExists(chatId))) return c.json({ error: 'chat not found' }, 404)
+      if (!(await getChat(chatId))) return c.json({ error: 'chat not found' }, 404)
       return c.json(await loadMessages(chatId), 200)
     },
   )
@@ -84,7 +73,8 @@ export const chatMessages = new Hono()
     validator('json', SendMessageSchema),
     async (c) => {
       const chatId = c.req.param('id')!
-      if (!(await chatExists(chatId))) return c.json({ error: 'chat not found' }, 404)
+      const chat = await getChat(chatId)
+      if (!chat) return c.json({ error: 'chat not found' }, 404)
 
       const { parts } = c.req.valid('json')
 
@@ -97,22 +87,18 @@ export const chatMessages = new Hono()
 
       const history = await loadMessages(chatId)
 
-      const result = streamText({
-        model,
-        system: SYSTEM_PROMPT,
-        messages: await convertToModelMessages(history),
-        abortSignal: c.req.raw.signal,
-      })
+      const system = buildSystemPrompt(
+        chat.resumeName !== null && chat.resumeText !== null
+          ? { name: chat.resumeName, text: chat.resumeText }
+          : null,
+      )
+
+      const { ollama } = c.get('services')
+      const result = await ollama.stream({ system, history, signal: c.req.raw.signal })
 
       return result.toUIMessageStreamResponse({
         originalMessages: history,
-        onError: (error) => {
-          console.error('chat stream failed', error)
-          if (APICallError.isInstance(error)) {
-            return `Model request failed (${error.statusCode ?? 'no status'}): ${error.responseBody ?? error.message}`
-          }
-          return 'The model could not be reached. Check OLLAMA_BASE_URL, OLLAMA_API_KEY and OLLAMA_MODEL.'
-        },
+        onError: (error) => ollama.describeError(error),
         onFinish: async ({ responseMessage }) => {
           await db
             .insert(messages)

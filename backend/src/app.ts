@@ -1,30 +1,32 @@
-import { Hono } from 'hono'
-import { openAPIRouteHandler } from 'hono-openapi'
 import { swaggerUI } from '@hono/swagger-ui'
+import { Hono } from 'hono'
 import { basicAuth } from 'hono/basic-auth'
+import { openAPIRouteHandler } from 'hono-openapi'
+import type { Config } from './config.js'
 import { chat } from './routes/chat.js'
+import { resumeRoutes } from './routes/resumes.js'
+import { type AppEnv, type Services, servicesMiddleware } from './services/index.js'
 
-const username = process.env.BASIC_AUTH_USERNAME
-const password = process.env.BASIC_AUTH_PASSWORD
+// Everything the app needs comes in as arguments, so tests can pass fake services
+export function createApp({ auth, services }: { auth: Config['auth']; services: Services }) {
+  const app = new Hono<AppEnv>()
 
-if (!username || !password) {
-  throw new Error('BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD must be set')
+  app.use('*', basicAuth(auth))
+  app.use('*', servicesMiddleware(services))
+
+  const routes = app.route('/chat', chat).route('/resumes', resumeRoutes)
+
+  app.get(
+    '/doc',
+    openAPIRouteHandler(app, {
+      documentation: { info: { title: 'Resume Chatbot API', version: '0.1.0' } },
+    }),
+  )
+
+  app.get('/swagger', swaggerUI({ url: '/doc' }))
+
+  return routes
 }
 
-export const app = new Hono()
-
-app.use('*', basicAuth({ username, password }))
-
-const routes = app.route('/chat', chat)
-
-app.get(
-  '/doc',
-  openAPIRouteHandler(app, {
-    documentation: { info: { title: 'Resume Chatbot API', version: '0.1.0' } },
-  }),
-)
-
-app.get('/swagger', swaggerUI({ url: '/doc' }))
-
 // Import as a type from the frontend for Hono RPC: `hc<AppType>(baseUrl)`
-export type AppType = typeof routes
+export type AppType = ReturnType<typeof createApp>

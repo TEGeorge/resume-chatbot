@@ -43,7 +43,9 @@ export function ChatPane({ chatId }: { chatId: string | null }) {
         <CardTitle>{chat?.name ?? 'No chat selected'}</CardTitle>
         <CardDescription>
           {chat
-            ? 'Ask about your resume and the jobs you are targeting.'
+            ? chat.resumeName
+              ? `Using CV: ${chat.resumeName}`
+              : 'Ask about your resume and the jobs you are targeting.'
             : 'Create or pick a chat to get started.'}
         </CardDescription>
       </CardHeader>
