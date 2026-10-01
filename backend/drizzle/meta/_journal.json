@@ -36,6 +36,13 @@
       "when": 1790880760564,
       "tag": "0004_add_prompt_version",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790881284371,
+      "tag": "0005_add_scores",
+      "breakpoints": true
     }
   ]
 }

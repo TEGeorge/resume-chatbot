@@ -1,6 +1,9 @@
 import type { UIMessage } from 'ai'
+import type { ScoreOutput } from '../services/scoring.js'
+
+type ScoreResult = Omit<ScoreOutput, 'globalScore'>
 import { sql } from 'drizzle-orm'
-import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 export const resumes = sqliteTable('resumes', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -65,3 +68,23 @@ export const chatJobs = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.chatId, table.jobId] })],
 )
+
+export const scores = sqliteTable('scores', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  resumeId: text('resume_id')
+    .notNull()
+    .references(() => resumes.id, { onDelete: 'cascade' }),
+  jobId: text('job_id')
+    .notNull()
+    .references(() => jobs.id, { onDelete: 'cascade' }),
+  // e.g. "score@v1"
+  promptVersion: text('prompt_version').notNull(),
+  model: text('model').notNull(),
+  globalScore: real('global_score').notNull(),
+  band: text('band', { enum: ['strong', 'good', 'decent', 'weak'] }).notNull(),
+  confidence: text('confidence', { enum: ['low', 'medium', 'high'] }).notNull(),
+  result: text('result', { mode: 'json' }).$type<ScoreResult>().notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' })
+    .notNull()
+    .default(sql`(unixepoch('subsec') * 1000)`),
+})

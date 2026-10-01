@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 // Prompts the app needs. Each must have an active version in the config.
-export const PROMPT_NAMES = ['chat'] as const
+export const PROMPT_NAMES = ['chat', 'score'] as const
 export type PromptName = (typeof PROMPT_NAMES)[number]
 
 export interface Prompt {

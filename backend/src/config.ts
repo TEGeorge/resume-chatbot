@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { PROMPT_NAMES } from './services/prompts.js'
 
 export interface OllamaConfig {
   baseURL: string
@@ -33,8 +34,11 @@ function loadPromptsConfig(env: NodeJS.ProcessEnv): PromptsConfig {
   } catch (error) {
     throw new Error(`Could not read ${file}: ${error instanceof Error ? error.message : error}`)
   }
-  // lets a version be tried or rolled back without editing files
-  if (env.PROMPT_CHAT_VERSION) active = { ...active, chat: env.PROMPT_CHAT_VERSION }
+  // PROMPT_<NAME>_VERSION lets a version be tried or rolled back without editing files
+  for (const name of PROMPT_NAMES) {
+    const override = env[`PROMPT_${name.toUpperCase()}_VERSION`]
+    if (override) active = { ...active, [name]: override }
+  }
   return { dir: join(backendRoot, 'prompts'), active }
 }
 

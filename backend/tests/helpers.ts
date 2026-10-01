@@ -8,6 +8,7 @@ import { messages } from '../src/db/schema.js'
 import { FileProcessingService } from '../src/services/file-processing.js'
 import { OllamaService } from '../src/services/ollama.js'
 import { PromptService } from '../src/services/prompts.js'
+import { ScoringService } from '../src/services/scoring.js'
 
 const AUTH = { Authorization: `Basic ${Buffer.from('t:t').toString('base64')}` }
 
@@ -65,34 +66,42 @@ export function createTestApp(model: LanguageModel, options: { promptVersion?: s
     runMigrations()
     migrated = true
   }
+  const ollama = new OllamaService({ baseURL: 'http://unused', model: 'unused' }, model)
+  const prompts = new PromptService(
+    { chat: TEST_PROMPTS, score: { v1: 'SCORE-PROMPT' } },
+    { chat: options.promptVersion ?? 'v2', score: 'v1' },
+  )
   return createApp({
     auth: { username: 't', password: 't' },
-    services: {
-      ollama: new OllamaService({ baseURL: 'http://unused', model: 'unused' }, model),
-      files: new FileProcessingService(),
-      prompts: new PromptService({ chat: TEST_PROMPTS }, { chat: options.promptVersion ?? 'v2' }),
-    },
+    services: { ollama, files: new FileProcessingService(), prompts, scoring: new ScoringService(ollama, prompts) },
   })
 }
 
 type TestApp = ReturnType<typeof createTestApp>
 
-function request(app: TestApp, path: string, init: RequestInit = {}) {
+export function api(app: TestApp, path: string, init: RequestInit = {}) {
   return app.request(path, { ...init, headers: { ...AUTH, ...init.headers } })
+}
+
+// A CV and a job, created through the API
+export async function seedDocuments(app: TestApp) {
+  const upload = async (path: string, text: string) => {
+    const form = new FormData()
+    form.set('text', text)
+    const created = await api(app, path, { method: 'POST', body: form })
+    return ((await created.json()) as { id: string }).id
+  }
+  return {
+    resumeId: await upload('/resumes', 'Ten years of Go.'),
+    jobId: await upload('/jobs', 'Backend engineer.'),
+  }
 }
 
 // A chat with a CV and a job, created through the API
 export async function seedChat(app: TestApp): Promise<string> {
-  const upload = async (path: string, text: string) => {
-    const form = new FormData()
-    form.set('text', text)
-    const created = await request(app, path, { method: 'POST', body: form })
-    return ((await created.json()) as { id: string }).id
-  }
-  const resumeId = await upload('/resumes', 'Ten years of Go.')
-  const jobId = await upload('/jobs', 'Backend engineer.')
+  const { resumeId, jobId } = await seedDocuments(app)
 
-  const res = await request(app, '/chat', {
+  const res = await api(app, '/chat', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name: 'test', resumeId, jobIds: [jobId] }),
@@ -101,7 +110,7 @@ export async function seedChat(app: TestApp): Promise<string> {
 }
 
 export function sendMessage(app: TestApp, chatId: string, text: string, signal?: AbortSignal) {
-  return request(app, `/chat/${chatId}/messages`, {
+  return api(app, `/chat/${chatId}/messages`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ parts: [{ type: 'text', text }] }),
@@ -179,3 +188,34 @@ export async function listen(app: TestApp) {
 }
 
 export { AUTH as authHeaders }
+
+// A model that answers once (not streamed) with this text, for structured output
+export function textModel(text: string) {
+  return new MockLanguageModelV4({
+    doGenerate: async () => ({
+      content: [{ type: 'text' as const, text }],
+      finishReason: { unified: 'stop' as const, raw: 'stop' },
+      usage: {
+        inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+        outputTokens: { total: 1, text: 1, reasoning: 0 },
+      },
+      warnings: [],
+    }),
+  })
+}
+
+// A model that gives each of these answers in turn (the last one repeats)
+export function sequenceModel(texts: string[]) {
+  let call = 0
+  return new MockLanguageModelV4({
+    doGenerate: async () => ({
+      content: [{ type: 'text' as const, text: texts[Math.min(call++, texts.length - 1)]! }],
+      finishReason: { unified: 'stop' as const, raw: 'stop' },
+      usage: {
+        inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+        outputTokens: { total: 1, text: 1, reasoning: 0 },
+      },
+      warnings: [],
+    }),
+  })
+}
