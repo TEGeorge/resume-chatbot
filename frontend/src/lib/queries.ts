@@ -22,3 +22,14 @@ export function useJobs() {
     },
   })
 }
+
+export function useChats() {
+  return useQuery({
+    queryKey: ['chats'],
+    queryFn: async () => {
+      const res = await api.chat.$get()
+      if (!res.ok) throw new Error('Failed to load chats')
+      return res.json()
+    },
+  })
+}

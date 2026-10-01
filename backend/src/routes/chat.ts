@@ -1,9 +1,9 @@
-import { asc, desc, eq, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { describeRoute, resolver, validator } from 'hono-openapi'
 import { z } from 'zod'
 import { db } from '../db/index.js'
-import { chatJobs, chats, jobs, resumes } from '../db/schema.js'
+import { chatJobs, chats, jobScores, jobs, resumes } from '../db/schema.js'
 import type { AppEnv } from '../services/index.js'
 import { chatMessages } from './messages.js'
 
@@ -14,7 +14,12 @@ const CreateChatSchema = z.object({
   jobIds: z.array(z.string().min(1)).min(1),
 })
 
-const ChatJobSchema = z.object({ id: z.string(), name: z.string() })
+const ChatJobSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  // stored fit score (1-5) for the chat's CV against this job, null until scored
+  score: z.number().nullable(),
+})
 
 const ChatSchema = z.object({
   id: z.string().meta({ example: 'f4392ade-3df1-4d60-a9ca-6ddc3fc2eb0a' }),
@@ -26,20 +31,29 @@ const ChatSchema = z.object({
   createdAt: z.date(),
 })
 
-// Jobs attached to each of the given chats, in position order
-async function jobsByChat(chatIds: string[]) {
+// Jobs attached to each of the given chats, in position order, with their current scores
+async function jobsByChat(chatIds: string[], rubricVersion: string) {
   const rows = chatIds.length
     ? await db
-        .select({ chatId: chatJobs.chatId, id: jobs.id, name: jobs.name })
+        .select({ chatId: chatJobs.chatId, id: jobs.id, name: jobs.name, score: jobScores.score })
         .from(chatJobs)
         .innerJoin(jobs, eq(chatJobs.jobId, jobs.id))
+        .innerJoin(chats, eq(chatJobs.chatId, chats.id))
+        .leftJoin(
+          jobScores,
+          and(
+            eq(jobScores.jobId, jobs.id),
+            eq(jobScores.resumeId, chats.resumeId),
+            eq(jobScores.rubricVersion, rubricVersion),
+          ),
+        )
         .where(inArray(chatJobs.chatId, chatIds))
         .orderBy(asc(chatJobs.position))
     : []
 
-  const grouped = new Map<string, { id: string; name: string }[]>()
-  for (const { chatId, id, name } of rows) {
-    grouped.set(chatId, [...(grouped.get(chatId) ?? []), { id, name }])
+  const grouped = new Map<string, { id: string; name: string; score: number | null }[]>()
+  for (const { chatId, ...job } of rows) {
+    grouped.set(chatId, [...(grouped.get(chatId) ?? []), job])
   }
   return grouped
 }
@@ -69,7 +83,10 @@ export const chat = new Hono<AppEnv>()
         .leftJoin(resumes, eq(chats.resumeId, resumes.id))
         .orderBy(desc(chats.createdAt))
 
-      const jobsFor = await jobsByChat(all.map((chat) => chat.id))
+      const jobsFor = await jobsByChat(
+        all.map((chat) => chat.id),
+        c.get('services').scoring.rubricVersion,
+      )
       return c.json(
         all.map((chat) => ({ ...chat, jobs: jobsFor.get(chat.id) ?? [] })),
         200,
@@ -101,11 +118,10 @@ export const chat = new Hono<AppEnv>()
       if (!resume) return c.json({ error: 'CV not found' }, 400)
 
       const found = await db
-        .select({ id: jobs.id, name: jobs.name })
+        .select({ id: jobs.id })
         .from(jobs)
         .where(inArray(jobs.id, jobIds))
       if (found.length !== jobIds.length) return c.json({ error: 'Job not found' }, 400)
-      const byId = new Map(found.map((job) => [job.id, job]))
 
       const created = db.transaction((tx) => {
         const [chat] = tx.insert(chats).values({ name, resumeId }).returning().all()
@@ -115,8 +131,10 @@ export const chat = new Hono<AppEnv>()
         return chat
       })
 
+      // the CV may already be scored against some of these jobs from another chat
+      const attached = await jobsByChat([created.id], c.get('services').scoring.rubricVersion)
       return c.json(
-        { ...created, resumeName: resume.name, jobs: jobIds.map((id) => byId.get(id)!) },
+        { ...created, resumeName: resume.name, jobs: attached.get(created.id) ?? [] },
         201,
       )
     },

@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 export interface OllamaConfig {
   baseURL: string
   model: string
@@ -6,9 +9,38 @@ export interface OllamaConfig {
   numCtx?: number
 }
 
+// Prompt text lives in backend/prompts/*.md so it can be edited and reviewed as prose
+export interface Prompts {
+  // chat system prompt
+  chat: string
+  // how to treat the CV and job documents
+  documents: string
+  // how to use stored job scores in chat
+  scores: string
+  // job scoring pass 1 (posting only) and pass 2 (CV against requirements)
+  scoreRequirements: string
+  scoreMatch: string
+}
+
 export interface Config {
   auth: { username: string; password: string }
   ollama: OllamaConfig
+  prompts: Prompts
+}
+
+// HTML comments (attribution, notes for editors) are stripped so they never reach the model
+export function loadPrompts(dir = join(import.meta.dirname, '..', 'prompts')): Prompts {
+  const read = (file: string) =>
+    readFileSync(join(dir, file), 'utf8')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .trim()
+  return {
+    chat: read('chat.md'),
+    documents: read('documents.md'),
+    scores: read('scores.md'),
+    scoreRequirements: read('score-requirements.md'),
+    scoreMatch: read('score-match.md'),
+  }
 }
 
 // Reads and validates the environment once, at startup
@@ -35,5 +67,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       apiKey: env.OLLAMA_API_KEY || undefined,
       numCtx,
     },
+    prompts: loadPrompts(env.PROMPTS_DIR || undefined),
   }
 }

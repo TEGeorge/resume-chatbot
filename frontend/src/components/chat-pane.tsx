@@ -1,5 +1,5 @@
 import { useChat } from '@ai-sdk/react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { DefaultChatTransport, type UIMessage } from 'ai'
 import {
   Conversation,
@@ -27,15 +27,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { JobScore } from '@/components/job-score'
 import { api } from '@/lib/api'
-
-type Chats = Awaited<ReturnType<Awaited<ReturnType<typeof api.chat.$get>>['json']>>
+import { useChats } from '@/lib/queries'
 
 export function ChatPane({ chatId }: { chatId: string | null }) {
-  const queryClient = useQueryClient()
-  const chat = queryClient
-    .getQueryData<Chats>(['chats'])
-    ?.find((c) => c.id === chatId)
+  // subscribed, so the header updates when a job gets scored
+  const chat = useChats().data?.find((c) => c.id === chatId)
 
   return (
     <Card className="min-w-0 flex-1 gap-0">
@@ -44,13 +42,22 @@ export function ChatPane({ chatId }: { chatId: string | null }) {
         <CardDescription>
           {chat
             ? chat.resumeName
-              ? [
-                  `CV: ${chat.resumeName}`,
-                  ...chat.jobs.map((job, i) => `Job #${i + 1}: ${job.name}`),
-                ].join(' · ')
+              ? `CV: ${chat.resumeName}`
               : 'Ask about your resume and the jobs you are targeting.'
             : 'Create or pick a chat to get started.'}
         </CardDescription>
+        {chat && chat.jobs.length > 0 && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {chat.jobs.map((job, i) => (
+              <JobScore
+                key={job.id}
+                resumeId={chat.resumeId}
+                job={job}
+                number={i + 1}
+              />
+            ))}
+          </div>
+        )}
       </CardHeader>
       {chatId ? (
         // key resets the conversation when switching chats (messages are in memory only for now)

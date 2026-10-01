@@ -1,10 +1,21 @@
-import { APICallError, convertToModelMessages, streamText, type LanguageModel, type UIMessage } from 'ai'
+import {
+  APICallError,
+  convertToModelMessages,
+  generateText,
+  Output,
+  streamText,
+  type LanguageModel,
+  type UIMessage,
+} from 'ai'
+import type { z } from 'zod'
 import { createOllama } from 'ollama-ai-provider-v2'
 import type { OllamaConfig } from '../config.js'
 
 export class OllamaService {
   private readonly model: LanguageModel
   private readonly numCtx: number | undefined
+  // identifies the model in stored results (job scores)
+  readonly modelName: string
 
   constructor(config: OllamaConfig) {
     const ollama = createOllama({
@@ -13,6 +24,7 @@ export class OllamaService {
     })
     this.model = ollama(config.model)
     this.numCtx = config.numCtx
+    this.modelName = config.model
   }
 
   // Streams a reply to the conversation so far. `onFinish` runs once with the text produced,
@@ -31,7 +43,7 @@ export class OllamaService {
       model: this.model,
       system: input.system,
       messages: await convertToModelMessages(input.history),
-      providerOptions: this.numCtx ? { ollama: { options: { num_ctx: this.numCtx } } } : undefined,
+      providerOptions: this.providerOptions(),
       abortSignal: input.signal,
       onChunk: ({ chunk }) => {
         if (chunk.type === 'text-delta') text += chunk.text
@@ -41,13 +53,35 @@ export class OllamaService {
     })
   }
 
-  // Message shown to the user when a stream fails
+  // One structured reply matching `schema` (Ollama's JSON-schema output). Throws if the model's
+  // reply does not parse.
+  async generateObject<T>(input: { system: string; prompt: string; schema: z.ZodType<T> }): Promise<T> {
+    this.warnIfTooLong(input.system + input.prompt, [])
+    const { output } = await generateText({
+      model: this.model,
+      system: input.system,
+      prompt: input.prompt,
+      output: Output.object({ schema: input.schema }),
+      // temperature 0 so the same CV and job score the same way
+      providerOptions: this.providerOptions({ temperature: 0 }),
+    })
+    return output
+  }
+
+  // Message shown to the user when a model request fails
   describeError(error: unknown): string {
-    console.error('chat stream failed', error)
+    console.error('model request failed', error)
     if (APICallError.isInstance(error)) {
       return `Model request failed (${error.statusCode ?? 'no status'}): ${error.responseBody ?? error.message}`
     }
     return 'The model could not be reached. Check OLLAMA_BASE_URL, OLLAMA_API_KEY and OLLAMA_MODEL.'
+  }
+
+  // Ollama reads sampling settings from `options`; the provider sends the AI SDK's top-level
+  // `temperature` outside it, where Ollama ignores it
+  private providerOptions(options: { temperature?: number } = {}) {
+    const all = this.numCtx ? { ...options, num_ctx: this.numCtx } : options
+    return Object.keys(all).length > 0 ? { ollama: { options: all } } : undefined
   }
 
   // Ollama truncates prompts longer than num_ctx without saying so

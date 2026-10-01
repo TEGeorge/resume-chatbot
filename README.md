@@ -62,6 +62,19 @@ Every new chat is created with one CV and one or more job postings from the libr
 
 The CV and the jobs go into the system prompt, marked as user-supplied data so that instructions hidden inside them are ignored. Jobs are numbered in the order they were picked, so "Job #2" in a question means the second one chosen (the chat header shows the numbering). Scanned (image-only) PDFs are rejected, so paste the text instead. Documents cannot be edited: upload again to change one. A CV or job that a chat uses cannot be deleted. Chats created before these existed keep working without them.
 
+### Prompts and job scoring
+
+Prompt text lives in `backend/prompts/*.md` and is loaded once at startup into the config (`PROMPTS_DIR` overrides the folder). HTML comments in those files are notes for editors and are stripped before anything reaches the model. Restart the server after editing a prompt.
+
+Each job in a chat can be scored against the chat's CV on demand (the Score button in the chat header, or `POST /scores`). The rubric is adapted from [career-ops](https://github.com/career-ops-hq/career-ops) (MIT) and runs in two model calls:
+
+1. The posting alone (`score-requirements.md`): requirements, each with an importance band (critical, high, meaningful, preferred, low signal) and the evidence for it (stated with a verbatim quote, structural, or inferred).
+2. The CV against those requirements (`score-match.md`): a match per requirement with a quoted CV line, gaps with interview risk and mitigation, and a holistic 1-5 score with a confidence level. 4.5+ is a strong match, 4.0-4.4 worth applying, 3.5-3.9 only with a reason, below 3.5 a recommendation against.
+
+The server also enforces the rules a model may skip: a "stated" importance needs a quote found in the posting, an inferred one can never be critical or high, a "strong" match needs a quote found in the CV, and at most 12 requirements are kept (every critical and high one survives).
+
+Scores are stored per CV, job and rubric version. The version is a hash of the two scoring prompts and the model name, so editing either prompt or changing `OLLAMA_MODEL` hides old scores until the job is scored again. Stored scores for a chat's jobs are added to its system prompt (with `scores.md` explaining how to use them), so the chat explains fit from the same table the user sees.
+
 ## Database
 
 Schema lives in `backend/src/db/schema.ts`. Migrations are Drizzle SQL files in `backend/drizzle/` and are committed.

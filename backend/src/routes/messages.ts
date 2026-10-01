@@ -1,10 +1,10 @@
 import type { UIMessage } from 'ai'
-import { asc, eq, sql } from 'drizzle-orm'
+import { and, asc, eq, sql } from 'drizzle-orm'
 import { Hono } from 'hono'
 import { describeRoute, resolver, validator } from 'hono-openapi'
 import { z } from 'zod'
 import { db } from '../db/index.js'
-import { chatJobs, chats, jobs, messages, resumes } from '../db/schema.js'
+import { chatJobs, chats, jobScores, jobs, messages, resumes } from '../db/schema.js'
 import { buildSystemPrompt } from '../lib/chat-context.js'
 import type { AppEnv } from '../services/index.js'
 
@@ -19,10 +19,11 @@ const MessageSchema = z.object({
   parts: z.array(z.record(z.string(), z.unknown())),
 })
 
-// The chat plus its CV (null for chats created before CVs existed) and jobs in Job #1, #2, ... order
-async function getChat(chatId: string) {
+// The chat plus its CV (null for chats created before CVs existed) and jobs in Job #1, #2, ... order,
+// each with its stored score for this CV under the current rubric (null if not scored)
+async function getChat(chatId: string, rubricVersion: string) {
   const [found] = await db
-    .select({ id: chats.id, resumeName: resumes.name, resumeText: resumes.text })
+    .select({ id: chats.id, resumeId: chats.resumeId, resumeName: resumes.name, resumeText: resumes.text })
     .from(chats)
     .leftJoin(resumes, eq(chats.resumeId, resumes.id))
     .where(eq(chats.id, chatId))
@@ -30,9 +31,18 @@ async function getChat(chatId: string) {
   if (!found) return undefined
 
   const attached = await db
-    .select({ name: jobs.name, text: jobs.text })
+    .select({ name: jobs.name, text: jobs.text, score: jobScores.result })
     .from(chatJobs)
     .innerJoin(jobs, eq(chatJobs.jobId, jobs.id))
+    .leftJoin(
+      jobScores,
+      and(
+        eq(jobScores.jobId, jobs.id),
+        // chats from before CVs existed have no CV, so nothing matches
+        eq(jobScores.resumeId, found.resumeId ?? ''),
+        eq(jobScores.rubricVersion, rubricVersion),
+      ),
+    )
     .where(eq(chatJobs.chatId, chatId))
     .orderBy(asc(chatJobs.position))
 
@@ -63,7 +73,8 @@ export const chatMessages = new Hono<AppEnv>()
     }),
     async (c) => {
       const chatId = c.req.param('id')!
-      if (!(await getChat(chatId))) return c.json({ error: 'chat not found' }, 404)
+      const { scoring } = c.get('services')
+      if (!(await getChat(chatId, scoring.rubricVersion))) return c.json({ error: 'chat not found' }, 404)
       return c.json(await loadMessages(chatId), 200)
     },
   )
@@ -82,7 +93,8 @@ export const chatMessages = new Hono<AppEnv>()
     validator('json', SendMessageSchema),
     async (c) => {
       const chatId = c.req.param('id')!
-      const chat = await getChat(chatId)
+      const { ollama, scoring, prompts } = c.get('services')
+      const chat = await getChat(chatId, scoring.rubricVersion)
       if (!chat) return c.json({ error: 'chat not found' }, 404)
 
       const { parts } = c.req.valid('json')
@@ -97,13 +109,13 @@ export const chatMessages = new Hono<AppEnv>()
       const history = await loadMessages(chatId)
 
       const system = buildSystemPrompt(
+        prompts,
         chat.resumeName !== null && chat.resumeText !== null
           ? { name: chat.resumeName, text: chat.resumeText }
           : null,
         chat.jobs,
       )
 
-      const { ollama } = c.get('services')
       const result = await ollama.stream({
         system,
         history,
