@@ -4,6 +4,7 @@ import { describeRoute, resolver, validator } from 'hono-openapi'
 import { z } from 'zod'
 import { db } from '../db/index.js'
 import { chatJobs, chats, jobs, resumes } from '../db/schema.js'
+import { RenameSchema } from '../lib/zod.js'
 import type { AppEnv } from '../services/index.js'
 import { chatMessages } from './messages.js'
 
@@ -44,6 +45,26 @@ async function jobsByChat(chatIds: string[]) {
   return grouped
 }
 
+const chatSelection = {
+  id: chats.id,
+  name: chats.name,
+  resumeId: chats.resumeId,
+  resumeName: resumes.name,
+  createdAt: chats.createdAt,
+}
+
+// One chat in the same shape as the list
+async function chatRecord(id: string) {
+  const [row] = await db
+    .select(chatSelection)
+    .from(chats)
+    .leftJoin(resumes, eq(chats.resumeId, resumes.id))
+    .where(eq(chats.id, id))
+    .limit(1)
+  if (!row) return undefined
+  return { ...row, jobs: (await jobsByChat([id])).get(id) ?? [] }
+}
+
 export const chat = new Hono<AppEnv>()
   .get(
     '/',
@@ -58,13 +79,7 @@ export const chat = new Hono<AppEnv>()
     }),
     async (c) => {
       const all = await db
-        .select({
-          id: chats.id,
-          name: chats.name,
-          resumeId: chats.resumeId,
-          resumeName: resumes.name,
-          createdAt: chats.createdAt,
-        })
+        .select(chatSelection)
         .from(chats)
         .leftJoin(resumes, eq(chats.resumeId, resumes.id))
         .orderBy(desc(chats.createdAt))
@@ -119,6 +134,53 @@ export const chat = new Hono<AppEnv>()
         { ...created, resumeName: resume.name, jobs: jobIds.map((id) => byId.get(id)!) },
         201,
       )
+    },
+  )
+  .patch(
+    '/:id',
+    describeRoute({
+      tags: ['chat'],
+      description: 'Rename a chat.',
+      responses: {
+        200: {
+          description: 'The renamed chat',
+          content: { 'application/json': { schema: resolver(ChatSchema) } },
+        },
+        400: { description: 'Invalid name' },
+        404: { description: 'Chat not found' },
+      },
+    }),
+    validator('json', RenameSchema),
+    async (c) => {
+      const id = c.req.param('id')
+      const [updated] = await db
+        .update(chats)
+        .set({ name: c.req.valid('json').name })
+        .where(eq(chats.id, id))
+        .returning({ id: chats.id })
+      if (!updated) return c.json({ error: 'Chat not found' }, 404)
+      return c.json((await chatRecord(id))!, 200)
+    },
+  )
+  .delete(
+    '/:id',
+    describeRoute({
+      tags: ['chat'],
+      description:
+        'Delete a chat with its messages. The resume and jobs it used are kept (and can then be deleted if nothing else uses them).',
+      responses: {
+        204: { description: 'Chat deleted' },
+        404: { description: 'Chat not found' },
+      },
+    }),
+    async (c) => {
+      // messages and job links are removed by the database (ON DELETE CASCADE)
+      const [deleted] = await db
+        .delete(chats)
+        .where(eq(chats.id, c.req.param('id')))
+        .returning({ id: chats.id })
+      if (!deleted) return c.json({ error: 'Chat not found' }, 404)
+      return c.body(null, 204)
     },
   )
   .route('/:id/messages', chatMessages)

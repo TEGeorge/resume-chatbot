@@ -16,12 +16,14 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
 } from '@/components/ai-elements/prompt-input'
+import { ChatMenu } from '@/components/chat-menu'
 import { ContextPanel } from '@/components/context-panel'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import { useChats } from '@/lib/queries'
+import { goHome } from '@/lib/route'
 
 interface Props {
   chatId: string
@@ -95,6 +97,7 @@ export function ChatView({ chatId, onOpenSidebar }: Props) {
           subtitle={`${chat.resumeName ?? 'No resume'} · ${chat.jobs.length} ${chat.jobs.length === 1 ? 'job' : 'jobs'}`}
           onOpenSidebar={onOpenSidebar}
           onTogglePanel={togglePanel}
+          menu={<ChatMenu chat={chat} onDeleted={goHome} />}
         />
         {/* key resets the conversation when switching chats */}
         <ChatSession key={chat.id} chatId={chat.id} jobCount={chat.jobs.length} />
@@ -120,6 +123,7 @@ function Header(props: {
   subtitle: string
   onOpenSidebar: () => void
   onTogglePanel?: () => void
+  menu?: React.ReactNode
 }) {
   return (
     <header className="flex items-center gap-2 border-b px-4 py-3">
@@ -135,6 +139,7 @@ function Header(props: {
           <PanelRightIcon /> <span className="hidden sm:inline">Details</span>
         </Button>
       )}
+      {props.menu}
     </header>
   )
 }

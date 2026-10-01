@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { db } from '../db/index.js'
 import { chats, resumes } from '../db/schema.js'
 import { DocumentFormSchema, readDocumentInput } from '../lib/document-input.js'
+import { RenameSchema } from '../lib/zod.js'
 import { ExtractError, MAX_UPLOAD_BYTES } from '../services/file-processing.js'
 import type { AppEnv } from '../services/index.js'
 
@@ -118,6 +119,40 @@ export const resumeRoutes = new Hono<AppEnv>()
           preview: created.text.slice(0, PREVIEW_CHARS),
         },
         201,
+      )
+    },
+  )
+  .patch(
+    '/:id',
+    describeRoute({
+      tags: ['resumes'],
+      description: 'Rename a resume. The text is unchanged.',
+      responses: {
+        200: {
+          description: 'The renamed resume',
+          content: { 'application/json': { schema: resolver(ResumeSummarySchema) } },
+        },
+        400: { description: 'Invalid name' },
+        404: { description: 'Resume not found' },
+      },
+    }),
+    validator('json', RenameSchema),
+    async (c) => {
+      const [updated] = await db
+        .update(resumes)
+        .set({ name: c.req.valid('json').name })
+        .where(eq(resumes.id, c.req.param('id')))
+        .returning()
+      if (!updated) return c.json({ error: 'Resume not found' }, 404)
+      return c.json(
+        {
+          id: updated.id,
+          name: updated.name,
+          fileName: updated.fileName,
+          createdAt: updated.createdAt,
+          preview: updated.text.slice(0, PREVIEW_CHARS),
+        },
+        200,
       )
     },
   )
