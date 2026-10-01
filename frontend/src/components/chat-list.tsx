@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { PlusIcon } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { api, errorMessage } from '@/lib/api'
-import { useJobs, useResumes } from '@/lib/queries'
+import { useChats, useJobs, useResumes } from '@/lib/queries'
 
 export function ChatList({
   selectedId,
@@ -39,14 +39,7 @@ export function ChatList({
   const resumes = useResumes()
   const jobs = useJobs()
 
-  const chats = useQuery({
-    queryKey: ['chats'],
-    queryFn: async () => {
-      const res = await api.chat.$get()
-      if (!res.ok) throw new Error('Failed to load chats')
-      return res.json()
-    },
-  })
+  const chats = useChats()
 
   const createChat = useMutation({
     mutationFn: async (input: { name: string; resumeId: string; jobIds: string[] }) => {
@@ -55,6 +48,8 @@ export function ChatList({
       return res.json()
     },
     onSuccess: (chat) => {
+      // show the new chat (with its CV and jobs) straight away, then refresh from the server
+      queryClient.setQueryData<(typeof chat)[]>(['chats'], (old) => [chat, ...(old ?? [])])
       setName('')
       setJobIds([])
       onSelect(chat.id)
