@@ -1,6 +1,11 @@
 import { serve } from '@hono/node-server'
-import { app } from './app.js'
+import { createApp } from './app.js'
+import { loadConfig } from './config.js'
 import { runMigrations } from './db/index.js'
+import { createServices } from './services/index.js'
+
+const config = loadConfig()
+const app = createApp({ auth: config.auth, services: createServices(config) })
 
 runMigrations()
 

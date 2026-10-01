@@ -29,27 +29,38 @@ Simple React chat frontend, using Shadcn/UI components with Tanstack for rapid d
 Setup and run (from `frontend/`, with the backend running):
 
 ```bash
-cp .env.example .env   # same Basic Auth credentials as backend/.env
 pnpm install
 pnpm dev               # http://localhost:5173
 ```
 
-The Vite dev server proxies `/api/*` to the backend (`http://localhost:3000`, override with `API_URL`) and attaches the Basic Auth credentials, so they never reach the browser. API calls use the typed Hono RPC client in `src/lib/api.ts`.
+The frontend has no credentials of its own. The browser shows its Basic Auth prompt on first use (enter the `BASIC_AUTH_*` values from `backend/.env`) and remembers the login. The Vite dev server proxies `/api/*` to the backend (`http://localhost:3000`, override with `API_URL`) so the browser sees a single origin, which is what lets that prompt and stored login apply to every request. API calls use the typed Hono RPC client in `src/lib/api.ts`.
 
 # Backend
 
-Hono used for a lightweight, edge supported runtime. Using Drizzle for the ORM with SQLite to keep the environment simple, Hono basic auth and TBD on AI provider.
+Hono used for a lightweight, edge supported runtime. Using Drizzle for the ORM with SQLite to keep the environment simple, Hono basic auth. Chat replies come from an Ollama API (`ollama-ai-provider-v2` with the Vercel AI SDK).
 
 Setup and run (from `backend/`):
 
 ```bash
-cp .env.example .env   # Basic Auth credentials
+cp .env.example .env   # Basic Auth credentials and Ollama settings
 pnpm install
 pnpm dev               # http://localhost:3000
 ```
 
+Configuration (`backend/.env`):
+
+- `OLLAMA_BASE_URL` (includes the `/api` path), `OLLAMA_MODEL`: required.
+- `OLLAMA_API_KEY`: optional, sent as a Bearer token.
+- `OLLAMA_NUM_CTX`: optional context window in tokens. Ollama silently truncates prompts longer than its default, and a CV in the prompt makes that easy to hit, so the server logs a warning when the prompt looks too long for this value.
+
 - API docs: Swagger UI at `/swagger`, OpenAPI spec at `/doc`.
 - Hono RPC: the frontend can import `AppType` from `backend/src/app.ts`.
+
+### CVs and jobs
+
+Every new chat is created with one CV and one or more job postings from the libraries. Both are uploaded the same way: PDF, DOCX, MD or TXT (max 5 MB), or pasted text. The text is extracted and stored, and only that text reaches the model. CVs are capped at 50,000 characters and job postings at 20,000 each, since several postings share one prompt.
+
+The CV and the jobs go into the system prompt, marked as user-supplied data so that instructions hidden inside them are ignored. Jobs are numbered in the order they were picked, so "Job #2" in a question means the second one chosen (the chat header shows the numbering). Scanned (image-only) PDFs are rejected, so paste the text instead. Documents cannot be edited: upload again to change one. A CV or job that a chat uses cannot be deleted. Chats created before these existed keep working without them.
 
 ## Database
 
