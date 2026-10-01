@@ -20,6 +20,7 @@ Backend (`cd backend`):
 - `pnpm build` / `pnpm start`: compile and run the build
 - `pnpm db:generate --name <name>`: create a migration after changing the schema
 - `pnpm db:migrate`: apply migrations manually (they also run on server startup)
+- `pnpm test`: run the backend tests (vitest). They build the real app with a scripted fake model and an in-memory database, so they need no network, ports or `.env`. `pnpm test:watch` re-runs on change
 - `PORT=3111 DATABASE_URL=/tmp/test.db pnpm dev`: run a second instance without touching a running dev server or its database
 
 Frontend (`cd frontend`):
@@ -31,7 +32,7 @@ Frontend (`cd frontend`):
 
 Setup: in `backend/`, copy `.env.example` to `.env` and fill in the values (credentials, Ollama URL, model and API key). `.env` files are git-ignored. The frontend needs no `.env`; the browser prompts for the backend credentials. Restart the dev server after editing `.env`.
 
-No test framework is configured yet.
+Tests exist for the backend only (vitest); the frontend has none yet.
 
 ## Lessons learned
 
