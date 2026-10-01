@@ -36,7 +36,7 @@ export const resumeRoutes = new Hono<AppEnv>()
       tags: ['resumes'],
       responses: {
         200: {
-          description: 'All CVs, newest first, with a short preview (no full text)',
+          description: 'All resumes, newest first, with a short preview (no full text)',
           content: { 'application/json': { schema: resolver(z.array(ResumeSummarySchema)) } },
         },
       },
@@ -52,10 +52,10 @@ export const resumeRoutes = new Hono<AppEnv>()
       tags: ['resumes'],
       responses: {
         200: {
-          description: 'One CV with its full extracted text',
+          description: 'One resume with its full extracted text',
           content: { 'application/json': { schema: resolver(ResumeSchema) } },
         },
-        404: { description: 'CV not found' },
+        404: { description: 'Resume not found' },
       },
     }),
     async (c) => {
@@ -70,7 +70,7 @@ export const resumeRoutes = new Hono<AppEnv>()
         .from(resumes)
         .where(eq(resumes.id, c.req.param('id')))
         .limit(1)
-      if (!found) return c.json({ error: 'CV not found' }, 404)
+      if (!found) return c.json({ error: 'Resume not found' }, 404)
       return c.json(found, 200)
     },
   )
@@ -82,7 +82,7 @@ export const resumeRoutes = new Hono<AppEnv>()
         'Multipart form with exactly one of `file` (PDF, DOCX, MD or TXT, max 5 MB) or `text`, and an optional `name`.',
       responses: {
         201: {
-          description: 'CV created',
+          description: 'Resume created',
           content: { 'application/json': { schema: resolver(ResumeSummarySchema) } },
         },
         400: { description: 'Send exactly one of file or text' },
@@ -101,7 +101,7 @@ export const resumeRoutes = new Hono<AppEnv>()
 
       let input
       try {
-        input = await readDocumentInput(files, c.req.valid('form'), { pastedName: 'Pasted CV' })
+        input = await readDocumentInput(files, c.req.valid('form'), { pastedName: 'Pasted resume' })
       } catch (error) {
         if (error instanceof ExtractError) return c.json({ error: error.message }, error.status)
         throw error
@@ -126,18 +126,18 @@ export const resumeRoutes = new Hono<AppEnv>()
     describeRoute({
       tags: ['resumes'],
       responses: {
-        204: { description: 'CV deleted' },
-        404: { description: 'CV not found' },
-        409: { description: 'A chat uses this CV' },
+        204: { description: 'Resume deleted' },
+        404: { description: 'Resume not found' },
+        409: { description: 'A chat uses this resume' },
       },
     }),
     async (c) => {
       const id = c.req.param('id')
       const [found] = await db.select({ id: resumes.id }).from(resumes).where(eq(resumes.id, id)).limit(1)
-      if (!found) return c.json({ error: 'CV not found' }, 404)
+      if (!found) return c.json({ error: 'Resume not found' }, 404)
 
       const [inUse] = await db.select({ id: chats.id }).from(chats).where(eq(chats.resumeId, id)).limit(1)
-      if (inUse) return c.json({ error: 'A chat uses this CV' }, 409)
+      if (inUse) return c.json({ error: 'A chat uses this resume' }, 409)
 
       await db.delete(resumes).where(eq(resumes.id, id))
       return c.body(null, 204)

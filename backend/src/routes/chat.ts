@@ -85,7 +85,7 @@ export const chat = new Hono<AppEnv>()
           description: 'Chat created',
           content: { 'application/json': { schema: resolver(ChatSchema) } },
         },
-        400: { description: 'Invalid body, unknown CV or unknown job' },
+        400: { description: 'Invalid body, unknown resume or unknown job' },
       },
     }),
     validator('json', CreateChatSchema),
@@ -98,7 +98,7 @@ export const chat = new Hono<AppEnv>()
         .from(resumes)
         .where(eq(resumes.id, resumeId))
         .limit(1)
-      if (!resume) return c.json({ error: 'CV not found' }, 400)
+      if (!resume) return c.json({ error: 'Resume not found' }, 400)
 
       const found = await db
         .select({ id: jobs.id, name: jobs.name })

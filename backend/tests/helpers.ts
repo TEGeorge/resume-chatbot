@@ -7,6 +7,8 @@ import { db, runMigrations } from '../src/db/index.js'
 import { messages } from '../src/db/schema.js'
 import { FileProcessingService } from '../src/services/file-processing.js'
 import { OllamaService } from '../src/services/ollama.js'
+import { PromptService } from '../src/services/prompts.js'
+import { ScoringService } from '../src/services/scoring.js'
 
 const AUTH = { Authorization: `Basic ${Buffer.from('t:t').toString('base64')}` }
 
@@ -55,39 +57,51 @@ export function scriptedModel(options: {
   })
 }
 
-// The real app, with only the model faked
-export function createTestApp(model: LanguageModel) {
+// Two versions of the chat prompt, so tests can tell which one was used
+export const TEST_PROMPTS = { v1: '<!-- first -->PROMPT-ONE', v2: 'PROMPT-TWO' }
+
+// The real app, with only the model faked. `promptVersion` picks the active chat prompt.
+export function createTestApp(model: LanguageModel, options: { promptVersion?: string } = {}) {
   if (!migrated) {
     runMigrations()
     migrated = true
   }
+  const ollama = new OllamaService({ baseURL: 'http://unused', model: 'unused' }, model)
+  const prompts = new PromptService(
+    { chat: TEST_PROMPTS, score: { v1: 'SCORE-PROMPT' } },
+    { chat: options.promptVersion ?? 'v2', score: 'v1' },
+  )
   return createApp({
     auth: { username: 't', password: 't' },
-    services: {
-      ollama: new OllamaService({ baseURL: 'http://unused', model: 'unused' }, model),
-      files: new FileProcessingService(),
-    },
+    services: { ollama, files: new FileProcessingService(), prompts, scoring: new ScoringService(ollama, prompts) },
   })
 }
 
 type TestApp = ReturnType<typeof createTestApp>
 
-function request(app: TestApp, path: string, init: RequestInit = {}) {
+export function api(app: TestApp, path: string, init: RequestInit = {}) {
   return app.request(path, { ...init, headers: { ...AUTH, ...init.headers } })
+}
+
+// A CV and a job, created through the API
+export async function seedDocuments(app: TestApp) {
+  const upload = async (path: string, text: string) => {
+    const form = new FormData()
+    form.set('text', text)
+    const created = await api(app, path, { method: 'POST', body: form })
+    return ((await created.json()) as { id: string }).id
+  }
+  return {
+    resumeId: await upload('/resumes', 'Ten years of Go.'),
+    jobId: await upload('/jobs', 'Backend engineer.'),
+  }
 }
 
 // A chat with a CV and a job, created through the API
 export async function seedChat(app: TestApp): Promise<string> {
-  const upload = async (path: string, text: string) => {
-    const form = new FormData()
-    form.set('text', text)
-    const created = await request(app, path, { method: 'POST', body: form })
-    return ((await created.json()) as { id: string }).id
-  }
-  const resumeId = await upload('/resumes', 'Ten years of Go.')
-  const jobId = await upload('/jobs', 'Backend engineer.')
+  const { resumeId, jobId } = await seedDocuments(app)
 
-  const res = await request(app, '/chat', {
+  const res = await api(app, '/chat', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name: 'test', resumeId, jobIds: [jobId] }),
@@ -96,7 +110,7 @@ export async function seedChat(app: TestApp): Promise<string> {
 }
 
 export function sendMessage(app: TestApp, chatId: string, text: string, signal?: AbortSignal) {
-  return request(app, `/chat/${chatId}/messages`, {
+  return api(app, `/chat/${chatId}/messages`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ parts: [{ type: 'text', text }] }),
@@ -131,6 +145,22 @@ export async function storedMessages(chatId: string) {
   }))
 }
 
+// Which prompt each assistant reply says it came from
+export async function storedPromptVersions(chatId: string) {
+  const rows = await db
+    .select({ role: messages.role, promptVersion: messages.promptVersion })
+    .from(messages)
+    .where(eq(messages.chatId, chatId))
+    .orderBy(asc(messages.createdAt))
+  return rows.map((row) => row.promptVersion)
+}
+
+// The system prompt the model was actually sent on its first call
+export function systemPromptSent(model: ReturnType<typeof scriptedModel>): string {
+  const system = model.doStreamCalls[0]?.prompt.find((m) => m.role === 'system')
+  return typeof system?.content === 'string' ? system.content : ''
+}
+
 export async function waitFor<T>(check: () => Promise<T | undefined | false>, timeoutMs = 2000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -158,3 +188,34 @@ export async function listen(app: TestApp) {
 }
 
 export { AUTH as authHeaders }
+
+// A model that answers once (not streamed) with this text, for structured output
+export function textModel(text: string) {
+  return new MockLanguageModelV4({
+    doGenerate: async () => ({
+      content: [{ type: 'text' as const, text }],
+      finishReason: { unified: 'stop' as const, raw: 'stop' },
+      usage: {
+        inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+        outputTokens: { total: 1, text: 1, reasoning: 0 },
+      },
+      warnings: [],
+    }),
+  })
+}
+
+// A model that gives each of these answers in turn (the last one repeats)
+export function sequenceModel(texts: string[]) {
+  let call = 0
+  return new MockLanguageModelV4({
+    doGenerate: async () => ({
+      content: [{ type: 'text' as const, text: texts[Math.min(call++, texts.length - 1)]! }],
+      finishReason: { unified: 'stop' as const, raw: 'stop' },
+      usage: {
+        inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+        outputTokens: { total: 1, text: 1, reasoning: 0 },
+      },
+      warnings: [],
+    }),
+  })
+}

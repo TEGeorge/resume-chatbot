@@ -6,6 +6,7 @@ import type { Config } from './config.js'
 import { chat } from './routes/chat.js'
 import { jobRoutes } from './routes/jobs.js'
 import { resumeRoutes } from './routes/resumes.js'
+import { scoreRoutes } from './routes/scores.js'
 import { type AppEnv, type Services, servicesMiddleware } from './services/index.js'
 
 // Everything the app needs comes in as arguments, so tests can pass fake services
@@ -15,7 +16,7 @@ export function createApp({ auth, services }: { auth: Config['auth']; services: 
   app.use('*', basicAuth(auth))
   app.use('*', servicesMiddleware(services))
 
-  const routes = app.route('/chat', chat).route('/resumes', resumeRoutes).route('/jobs', jobRoutes)
+  const routes = app.route('/chat', chat).route('/resumes', resumeRoutes).route('/jobs', jobRoutes).route('/scores', scoreRoutes)
 
   app.get(
     '/doc',

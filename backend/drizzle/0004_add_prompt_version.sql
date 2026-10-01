@@ -1,0 +1,1 @@
+ALTER TABLE `messages` ADD `prompt_version` text;
