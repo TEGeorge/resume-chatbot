@@ -6,12 +6,14 @@ export class OllamaService {
   private readonly model: LanguageModel
   private readonly numCtx: number | undefined
 
-  constructor(config: OllamaConfig) {
-    const ollama = createOllama({
-      baseURL: config.baseURL,
-      headers: config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : undefined,
-    })
-    this.model = ollama(config.model)
+  // `model` is only passed by tests, to script replies without a real Ollama
+  constructor(config: OllamaConfig, model?: LanguageModel) {
+    this.model =
+      model ??
+      createOllama({
+        baseURL: config.baseURL,
+        headers: config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : undefined,
+      })(config.model)
     this.numCtx = config.numCtx
   }
 
