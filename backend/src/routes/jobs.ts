@@ -6,12 +6,16 @@ import { z } from 'zod'
 import { db } from '../db/index.js'
 import { chatJobs, jobs } from '../db/schema.js'
 import { DocumentFormSchema, readDocumentInput } from '../lib/document-input.js'
+import { RenameSchema } from '../lib/zod.js'
 import { ExtractError, MAX_UPLOAD_BYTES } from '../services/file-processing.js'
 import type { AppEnv } from '../services/index.js'
 
 const PREVIEW_CHARS = 200
 // Several postings share one prompt, so each is capped lower than a CV
 export const JOB_MAX_CHARS = 20_000
+
+// Unlike a resume, a job must be given a name
+const JobFormSchema = DocumentFormSchema.extend({ name: z.string().trim().min(1) })
 
 const JobSummarySchema = z.object({
   id: z.string(),
@@ -80,13 +84,13 @@ export const jobRoutes = new Hono<AppEnv>()
     '/',
     describeRoute({
       tags: ['jobs'],
-      description: `Multipart form with exactly one of \`file\` (PDF, DOCX, MD or TXT, max 5 MB) or \`text\`, and an optional \`name\`. Text is capped at ${JOB_MAX_CHARS} characters.`,
+      description: `Multipart form with exactly one of \`file\` (PDF, DOCX, MD or TXT, max 5 MB) or \`text\`, and a required \`name\`. Text is capped at ${JOB_MAX_CHARS} characters.`,
       responses: {
         201: {
           description: 'Job created',
           content: { 'application/json': { schema: resolver(JobSummarySchema) } },
         },
-        400: { description: 'Send exactly one of file or text' },
+        400: { description: 'Send exactly one of file or text, and a name' },
         413: { description: 'File too large' },
         415: { description: 'Unsupported file type' },
         422: { description: 'No readable text in the file' },
@@ -96,14 +100,14 @@ export const jobRoutes = new Hono<AppEnv>()
       maxSize: MAX_UPLOAD_BYTES,
       onError: (c) => c.json({ error: 'File too large (max 5 MB)' }, 413),
     }),
-    validator('form', DocumentFormSchema),
+    validator('form', JobFormSchema),
     async (c) => {
       const { files } = c.get('services')
 
       let input
       try {
         input = await readDocumentInput(files, c.req.valid('form'), {
-          pastedName: 'Pasted job',
+          pastedName: 'Pasted job', // never used: a name is required
           maxChars: JOB_MAX_CHARS,
         })
       } catch (error) {
@@ -122,6 +126,40 @@ export const jobRoutes = new Hono<AppEnv>()
           preview: created.text.slice(0, PREVIEW_CHARS),
         },
         201,
+      )
+    },
+  )
+  .patch(
+    '/:id',
+    describeRoute({
+      tags: ['jobs'],
+      description: 'Rename a job. The text is unchanged.',
+      responses: {
+        200: {
+          description: 'The renamed job',
+          content: { 'application/json': { schema: resolver(JobSummarySchema) } },
+        },
+        400: { description: 'Invalid name' },
+        404: { description: 'Job not found' },
+      },
+    }),
+    validator('json', RenameSchema),
+    async (c) => {
+      const [updated] = await db
+        .update(jobs)
+        .set({ name: c.req.valid('json').name })
+        .where(eq(jobs.id, c.req.param('id')))
+        .returning()
+      if (!updated) return c.json({ error: 'Job not found' }, 404)
+      return c.json(
+        {
+          id: updated.id,
+          name: updated.name,
+          fileName: updated.fileName,
+          createdAt: updated.createdAt,
+          preview: updated.text.slice(0, PREVIEW_CHARS),
+        },
+        200,
       )
     },
   )

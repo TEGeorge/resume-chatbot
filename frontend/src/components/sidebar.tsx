@@ -1,8 +1,9 @@
 import { BriefcaseBusinessIcon, LibraryIcon, PlusIcon } from 'lucide-react'
+import { ChatMenu } from '@/components/chat-menu'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useChats, useJobs, useResumes } from '@/lib/queries'
-import { hrefFor, type Route } from '@/lib/route'
+import { goHome, hrefFor, type Route } from '@/lib/route'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -56,13 +57,13 @@ export function Sidebar({ route, onNewChat, onNavigate }: Props) {
           )}
           <ul className="flex flex-col gap-0.5">
             {chats.data?.map((chat) => (
-              <li key={chat.id}>
+              <li key={chat.id} className="group relative">
                 <a
                   href={hrefFor({ view: 'chat', chatId: chat.id })}
                   onClick={onNavigate}
                   aria-current={chat.id === activeChat ? 'page' : undefined}
                   className={cn(
-                    'block rounded-lg px-3 py-2 transition-colors hover:bg-accent',
+                    'block rounded-lg py-2 pr-10 pl-3 transition-colors hover:bg-accent',
                     chat.id === activeChat && 'bg-accent',
                   )}
                 >
@@ -71,6 +72,12 @@ export function Sidebar({ route, onNewChat, onNavigate }: Props) {
                     {chat.resumeName ?? 'No resume'} · {chat.jobs.length} {chat.jobs.length === 1 ? 'job' : 'jobs'}
                   </span>
                 </a>
+                {/* always visible on touch screens; on desktop it appears on hover or focus */}
+                <ChatMenu
+                  chat={chat}
+                  onDeleted={() => chat.id === activeChat && goHome()}
+                  className="absolute top-2 right-1.5 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100 data-popup-open:opacity-100"
+                />
               </li>
             ))}
           </ul>

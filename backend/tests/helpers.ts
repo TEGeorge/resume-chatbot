@@ -88,6 +88,7 @@ export async function seedDocuments(app: TestApp) {
   const upload = async (path: string, text: string) => {
     const form = new FormData()
     form.set('text', text)
+    form.set('name', path === '/jobs' ? 'Backend role' : 'My resume')
     const created = await api(app, path, { method: 'POST', body: form })
     return ((await created.json()) as { id: string }).id
   }

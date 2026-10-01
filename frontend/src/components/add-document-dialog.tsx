@@ -23,11 +23,13 @@ interface Props {
   // 'resume' or 'job'
   noun: string
   queryKey: 'resumes' | 'jobs'
+  // jobs must be named; a resume falls back to the file name
+  nameRequired?: boolean
   add: (form: AddForm) => Promise<Response>
 }
 
 // Upload a file or paste text to add a resume or job posting
-export function AddDocumentDialog({ noun, queryKey, add }: Props) {
+export function AddDocumentDialog({ noun, queryKey, nameRequired = false, add }: Props) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<'file' | 'text'>('file')
@@ -58,7 +60,7 @@ export function AddDocumentDialog({ noun, queryKey, add }: Props) {
     create.reset()
   }
 
-  const ready = mode === 'file' ? !!file : !!text.trim()
+  const ready = (mode === 'file' ? !!file : !!text.trim()) && (!nameRequired || !!name.trim())
 
   return (
     <Dialog
@@ -96,7 +98,12 @@ export function AddDocumentDialog({ noun, queryKey, add }: Props) {
                 type="file"
                 accept=".pdf,.docx,.md,.txt"
                 aria-label={`${noun} file`}
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  const chosen = e.target.files?.[0] ?? null
+                  setFile(chosen)
+                  // start from the file name; it can be edited
+                  if (chosen && !name.trim()) setName(chosen.name.replace(/\.[^.]+$/, ''))
+                }}
               />
             </TabsContent>
             <TabsContent value="text" className="pt-3">
@@ -111,12 +118,19 @@ export function AddDocumentDialog({ noun, queryKey, add }: Props) {
           </Tabs>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="document-name">Name (optional)</Label>
+            <Label htmlFor="document-name">Name{nameRequired ? '' : ' (optional)'}</Label>
             <Input
               id="document-name"
+              required={nameRequired}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={mode === 'file' ? 'Defaults to the file name' : `Pasted ${noun}`}
+              placeholder={
+                nameRequired
+                  ? 'e.g. Senior Engineer at Acme'
+                  : mode === 'file'
+                    ? 'Defaults to the file name'
+                    : `Pasted ${noun}`
+              }
             />
           </div>
 

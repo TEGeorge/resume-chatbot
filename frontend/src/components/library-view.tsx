@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { BriefcaseBusinessIcon, FileTextIcon, MenuIcon, Trash2Icon } from 'lucide-react'
+import { BriefcaseBusinessIcon, FileTextIcon, MenuIcon, PencilIcon, Trash2Icon } from 'lucide-react'
 import { useState } from 'react'
 import { AddDocumentDialog, type AddForm } from '@/components/add-document-dialog'
 import { DocumentPreview } from '@/components/document-preview'
+import { RenameDialog } from '@/components/rename-dialog'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -25,14 +26,17 @@ interface ListProps {
   isPending: boolean
   isError: boolean
   emptyText: string
+  nameRequired?: boolean
   add: (form: AddForm) => Promise<Response>
+  rename: (id: string, name: string) => Promise<Response>
   remove: (id: string) => Promise<Response>
 }
 
-function DocumentList({ noun, kind, items, isPending, isError, emptyText, add, remove }: ListProps) {
+function DocumentList({ noun, kind, items, isPending, isError, emptyText, nameRequired, add, rename, remove }: ListProps) {
   const queryClient = useQueryClient()
   // delete takes two clicks, so one stray click cannot remove something
   const [confirming, setConfirming] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState<Item | null>(null)
 
   const del = useMutation({
     mutationFn: async (id: string) => {
@@ -55,7 +59,7 @@ function DocumentList({ noun, kind, items, isPending, isError, emptyText, add, r
         <p className="text-sm text-muted-foreground">
           {items ? `${items.length} saved` : 'Loading…'}
         </p>
-        <AddDocumentDialog noun={noun} queryKey={kind} add={add} />
+        <AddDocumentDialog noun={noun} queryKey={kind} nameRequired={nameRequired} add={add} />
       </div>
 
       {isPending && (
@@ -93,6 +97,14 @@ function DocumentList({ noun, kind, items, isPending, isError, emptyText, add, r
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <DocumentPreview kind={kind} id={item.id} name={item.name} />
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Rename ${item.name}`}
+                  onClick={() => setRenaming(item)}
+                >
+                  <PencilIcon />
+                </Button>
                 {confirming === item.id ? (
                   <>
                     <Button
@@ -125,6 +137,20 @@ function DocumentList({ noun, kind, items, isPending, isError, emptyText, add, r
           </li>
         ))}
       </ul>
+
+      <RenameDialog
+        open={!!renaming}
+        onOpenChange={(open) => !open && setRenaming(null)}
+        title={`Rename ${noun}`}
+        current={renaming?.name ?? ''}
+        save={(name) => rename(renaming!.id, name)}
+        // names are copied into chat lists and scores, so refresh those as well
+        onSaved={async () => {
+          await Promise.all(
+            [kind, 'chats', 'scores'].map((key) => queryClient.invalidateQueries({ queryKey: [key] })),
+          )
+        }}
+      />
     </div>
   )
 }
@@ -169,6 +195,7 @@ export function LibraryView({ tab, onNavigate, onOpenSidebar }: Props) {
                 isError={resumes.isError}
                 emptyText="No resumes yet. Add the resume you want the assistant to compare against jobs."
                 add={(form) => api.resumes.$post({ form })}
+                rename={(id, name) => api.resumes[':id'].$patch({ param: { id }, json: { name } })}
                 remove={(id) => api.resumes[':id'].$delete({ param: { id } })}
               />
             </TabsContent>
@@ -180,7 +207,9 @@ export function LibraryView({ tab, onNavigate, onOpenSidebar }: Props) {
                 isPending={jobs.isPending}
                 isError={jobs.isError}
                 emptyText="No jobs yet. Add a posting you are considering, or several to compare."
-                add={(form) => api.jobs.$post({ form })}
+                nameRequired
+                add={(form) => api.jobs.$post({ form: { ...form, name: form.name ?? '' } })}
+                rename={(id, name) => api.jobs[':id'].$patch({ param: { id }, json: { name } })}
                 remove={(id) => api.jobs[':id'].$delete({ param: { id } })}
               />
             </TabsContent>

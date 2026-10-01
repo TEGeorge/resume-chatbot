@@ -32,3 +32,8 @@ export function useRoute(): [Route, (route: Route) => void] {
   }, [])
   return [parse(hash), navigate]
 }
+
+// Back to the empty start page (used after the open chat is deleted)
+export function goHome() {
+  window.location.hash = hrefFor({ view: 'chat', chatId: null })
+}
