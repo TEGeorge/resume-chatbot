@@ -19,7 +19,7 @@ const BAND_STYLE: Record<Score['band'], string> = {
 }
 
 const DIMENSIONS: Array<[keyof Score['dimensions'], string]> = [
-  ['cvMatch', 'CV match'],
+  ['cvMatch', 'Resume match'],
   ['trajectoryFit', 'Trajectory fit'],
   ['comp', 'Compensation'],
   ['culture', 'Culture'],

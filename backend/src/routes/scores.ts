@@ -72,13 +72,13 @@ export const scoreRoutes = new Hono<AppEnv>()
     describeRoute({
       tags: ['scores'],
       description:
-        'Scores one job against one CV with the model and stores the result. Every call creates a new score, so repeated runs and different prompt versions can be compared.',
+        'Scores one job against one resume with the model and stores the result. Every call creates a new score, so repeated runs and different prompt versions can be compared.',
       responses: {
         201: {
           description: 'Score created',
           content: { 'application/json': { schema: resolver(ScoreSchema) } },
         },
-        400: { description: 'Invalid body, unknown CV or unknown job' },
+        400: { description: 'Invalid body, unknown resume or unknown job' },
         502: { description: 'The model failed or returned an unusable result' },
       },
     }),
@@ -87,7 +87,7 @@ export const scoreRoutes = new Hono<AppEnv>()
       const { resumeId, jobId } = c.req.valid('json')
 
       const [resume] = await db.select().from(resumes).where(eq(resumes.id, resumeId)).limit(1)
-      if (!resume) return c.json({ error: 'CV not found' }, 400)
+      if (!resume) return c.json({ error: 'Resume not found' }, 400)
       const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId)).limit(1)
       if (!job) return c.json({ error: 'Job not found' }, 400)
 

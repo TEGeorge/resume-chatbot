@@ -6,7 +6,7 @@ export function useResumes() {
     queryKey: ['resumes'],
     queryFn: async () => {
       const res = await api.resumes.$get()
-      if (!res.ok) throw new Error('Failed to load CVs')
+      if (!res.ok) throw new Error('Failed to load resumes')
       return res.json()
     },
   })
@@ -23,7 +23,7 @@ export function useJobs() {
   })
 }
 
-// Stored scores for a CV (all its jobs), newest first
+// Stored scores for a resume (all its jobs), newest first
 export function useScores(resumeId: string) {
   return useQuery({
     queryKey: ['scores', resumeId],
@@ -43,6 +43,22 @@ export function useChats() {
       const res = await api.chat.$get()
       if (!res.ok) throw new Error('Failed to load chats')
       return res.json()
+    },
+  })
+}
+
+// The full extracted text of a resume or job, loaded only when `enabled` (for the preview dialog)
+export function useDocumentText(kind: 'resumes' | 'jobs', id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [kind, id, 'text'],
+    enabled,
+    queryFn: async () => {
+      const res =
+        kind === 'resumes'
+          ? await api.resumes[':id'].$get({ param: { id } })
+          : await api.jobs[':id'].$get({ param: { id } })
+      if (!res.ok) throw new Error('Could not load the text')
+      return (await res.json()) as { name: string; text: string }
     },
   })
 }

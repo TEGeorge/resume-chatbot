@@ -24,7 +24,13 @@ Built using Typescript, with React for the frontend and Hono for the backend. SQ
 
 # Frontend
 
-Simple React chat frontend, using Shadcn/UI components with Tanstack for rapid development.
+Resume Chatbot: a React chat frontend using Shadcn/UI components, TanStack Query and AI Elements for rapid development.
+
+- **Sidebar:** a **New chat** button, your chats (with the resume and number of jobs each uses), and a link to the library.
+- **New chat:** pick a resume and one or more jobs. The order you pick the jobs in is Job #1, Job #2, and so on, which is how you can refer to them in the chat.
+- **Chat:** a centered conversation with suggested questions on an empty chat. The **Details** panel on the right shows the chat's resume and jobs, and lets you score each job: a global score out of 5, a band, confidence, the five dimensions with their evidence, things worth checking, and earlier runs. On smaller screens the sidebar and details open as drawers.
+- **Library:** add, preview and delete resumes and job postings (upload a file or paste text). A resume or job that a chat uses cannot be deleted.
+- **Links:** the address reflects where you are (`#/chat/<id>`, `#/library/resumes`), so refreshing keeps your place and the back button works.
 
 Setup and run (from `frontend/`, with the backend running):
 
