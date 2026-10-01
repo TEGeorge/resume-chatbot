@@ -7,6 +7,7 @@ import { db, runMigrations } from '../src/db/index.js'
 import { messages } from '../src/db/schema.js'
 import { FileProcessingService } from '../src/services/file-processing.js'
 import { OllamaService } from '../src/services/ollama.js'
+import { PromptService } from '../src/services/prompts.js'
 
 const AUTH = { Authorization: `Basic ${Buffer.from('t:t').toString('base64')}` }
 
@@ -55,8 +56,11 @@ export function scriptedModel(options: {
   })
 }
 
-// The real app, with only the model faked
-export function createTestApp(model: LanguageModel) {
+// Two versions of the chat prompt, so tests can tell which one was used
+export const TEST_PROMPTS = { v1: '<!-- first -->PROMPT-ONE', v2: 'PROMPT-TWO' }
+
+// The real app, with only the model faked. `promptVersion` picks the active chat prompt.
+export function createTestApp(model: LanguageModel, options: { promptVersion?: string } = {}) {
   if (!migrated) {
     runMigrations()
     migrated = true
@@ -66,6 +70,7 @@ export function createTestApp(model: LanguageModel) {
     services: {
       ollama: new OllamaService({ baseURL: 'http://unused', model: 'unused' }, model),
       files: new FileProcessingService(),
+      prompts: new PromptService({ chat: TEST_PROMPTS }, { chat: options.promptVersion ?? 'v2' }),
     },
   })
 }
@@ -129,6 +134,22 @@ export async function storedMessages(chatId: string) {
     role: row.role,
     text: row.parts.map((p) => (p.type === 'text' ? p.text : '')).join(''),
   }))
+}
+
+// Which prompt each assistant reply says it came from
+export async function storedPromptVersions(chatId: string) {
+  const rows = await db
+    .select({ role: messages.role, promptVersion: messages.promptVersion })
+    .from(messages)
+    .where(eq(messages.chatId, chatId))
+    .orderBy(asc(messages.createdAt))
+  return rows.map((row) => row.promptVersion)
+}
+
+// The system prompt the model was actually sent on its first call
+export function systemPromptSent(model: ReturnType<typeof scriptedModel>): string {
+  const system = model.doStreamCalls[0]?.prompt.find((m) => m.role === 'system')
+  return typeof system?.content === 'string' ? system.content : ''
 }
 
 export async function waitFor<T>(check: () => Promise<T | undefined | false>, timeoutMs = 2000) {

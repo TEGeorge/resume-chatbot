@@ -9,6 +9,8 @@ import {
   seedChat,
   sendMessage,
   storedMessages,
+  storedPromptVersions,
+  systemPromptSent,
   waitFor,
 } from './helpers.js'
 
@@ -35,6 +37,38 @@ describe('POST /chat/:id/messages', () => {
       { role: 'user', text: 'Hello' },
       { role: 'assistant', text: FULL_REPLY },
     ])
+  })
+
+  it('sends the active prompt version with the documents and records the version on the reply', async () => {
+    const model = scriptedModel({ words: WORDS })
+    const app = createTestApp(model, { promptVersion: 'v2' })
+    const chatId = await seedChat(app)
+
+    await readStream(await sendMessage(app, chatId, 'Hello'))
+    await waitFor(async () => (await storedMessages(chatId)).length === 2)
+
+    const system = systemPromptSent(model)
+    expect(system.startsWith('PROMPT-TWO')).toBe(true)
+    expect(system).toContain('<resume name="')
+    expect(system).toContain('<job number="1"')
+    expect(system).not.toContain('PROMPT-ONE')
+    // user message has no prompt; the reply names the one that produced it
+    expect(await storedPromptVersions(chatId)).toEqual([null, 'chat@v2'])
+  })
+
+  it('uses another version when the config selects it', async () => {
+    const model = scriptedModel({ words: WORDS })
+    const app = createTestApp(model, { promptVersion: 'v1' })
+    const chatId = await seedChat(app)
+
+    await readStream(await sendMessage(app, chatId, 'Hello'))
+    await waitFor(async () => (await storedMessages(chatId)).length === 2)
+
+    const system = systemPromptSent(model)
+    expect(system.startsWith('PROMPT-ONE')).toBe(true)
+    // the human-only leading comment is not sent to the model
+    expect(system).not.toContain('first')
+    expect(await storedPromptVersions(chatId)).toEqual([null, 'chat@v1'])
   })
 
   it('keeps the part of the reply produced before the browser disconnected', async () => {

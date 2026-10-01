@@ -43,6 +43,8 @@ export const messages = sqliteTable('messages', {
   role: text('role', { enum: ['user', 'assistant', 'system'] }).notNull(),
   // AI SDK UIMessage parts, stored as JSON
   parts: text('parts', { mode: 'json' }).$type<UIMessage['parts']>().notNull(),
+  // which prompt produced an assistant reply, e.g. "chat@v2" (null for user messages)
+  promptVersion: text('prompt_version'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .notNull()
     .default(sql`(unixepoch('subsec') * 1000)`),

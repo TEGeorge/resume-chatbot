@@ -62,6 +62,10 @@ Every new chat is created with one CV and one or more job postings from the libr
 
 The CV and the jobs go into the system prompt, marked as user-supplied data so that instructions hidden inside them are ignored. Jobs are numbered in the order they were picked, so "Job #2" in a question means the second one chosen (the chat header shows the numbering). Scanned (image-only) PDFs are rejected, so paste the text instead. Documents cannot be edited: upload again to change one. A CV or job that a chat uses cannot be deleted. Chats created before these existed keep working without them.
 
+### Prompts
+
+The system prompt is versioned. Files live in `backend/prompts/<name>/<version>.md` (currently `chat/v1.md` and `chat/v2.md`), and `backend/config/prompts.json` picks the active version. To change the prompt, add the next version file and point the config at it; old versions stay for comparison and rollback. Set `PROMPT_CHAT_VERSION=v1` in `backend/.env` to try or roll back a version without editing files. The server refuses to start if the configured version does not exist, and every assistant reply is stored with the version that produced it (for example `chat@v2`). `backend/prompts/README.md` describes the document format a prompt can rely on. The v2 prompt borrows its grounding rules from [Career Ops](https://github.com/career-ops-hq/career-ops) (MIT).
+
 ## Database
 
 Schema lives in `backend/src/db/schema.ts`. Migrations are Drizzle SQL files in `backend/drizzle/` and are committed.

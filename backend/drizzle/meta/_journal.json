@@ -29,6 +29,13 @@
       "when": 1790801829346,
       "tag": "0003_add_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790880760564,
+      "tag": "0004_add_prompt_version",
+      "breakpoints": true
     }
   ]
 }

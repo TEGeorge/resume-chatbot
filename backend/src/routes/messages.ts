@@ -7,6 +7,7 @@ import { db } from '../db/index.js'
 import { chatJobs, chats, jobs, messages, resumes } from '../db/schema.js'
 import { buildSystemPrompt } from '../lib/chat-context.js'
 import type { AppEnv } from '../services/index.js'
+import { promptLabel } from '../services/prompts.js'
 
 // Only the parts are accepted: the role is always 'user' and the server assigns the id.
 const SendMessageSchema = z.object({
@@ -96,14 +97,16 @@ export const chatMessages = new Hono<AppEnv>()
 
       const history = await loadMessages(chatId)
 
+      const { ollama, prompts } = c.get('services')
+      const prompt = prompts.get('chat')
       const system = buildSystemPrompt(
+        prompt.text,
         chat.resumeName !== null && chat.resumeText !== null
           ? { name: chat.resumeName, text: chat.resumeText }
           : null,
         chat.jobs,
       )
 
-      const { ollama } = c.get('services')
       const result = await ollama.stream({
         system,
         history,
@@ -117,6 +120,7 @@ export const chatMessages = new Hono<AppEnv>()
             chatId,
             role: 'assistant',
             parts: [{ type: 'text', text, state: 'done' }],
+            promptVersion: promptLabel(prompt),
           })
         },
       })
