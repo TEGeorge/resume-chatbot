@@ -101,6 +101,8 @@ The ideal deployment target is Cloudflare, which partly informed the choice of H
 
 D1 has limitations that may make it unsuitable for heavy workloads. An alternative is AWS: the backend is already a container, so it could run on ECS with the frontend hosted in S3 as static assets. SQLite could then be replaced with Postgres on RDS, using pgvector for the embeddings. Rate limiting and other production settings could be configured through the Cloudflare proxy or AWS CloudFront.
 
+To really operate at scale, I would target the AWS deploy method with Postgres and a reliable AI provider (with fallbacks).
+
 ### RAG and LLM choice
 
 The initial design kept all job and resume text in the system prompt, as most cloud-based LLMs have large context windows and cache the prompt between turns. RAG would only have been useful with a large set of jobs, which I felt was unlikely here, although it does enforce a limit on job size. Since the task mentioned RAG, I added a simple embedding and vector search using the nomic embedding model and sqlite-vec. Nomic is small enough to be hosted locally in Docker as part of the deployment, and sqlite-vec is sufficient for the task.
