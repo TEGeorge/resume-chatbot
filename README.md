@@ -148,7 +148,7 @@ I would usually keep a structured CLAUDE.md file with a rough overview and devel
 
 ## Stack
 
-Built using Typescript, with React for the frontend and Hono for the backend. SQLite for the database and TBD on the AI provider.
+Built using Typescript, with React for the frontend and Hono for the backend. SQLite for the database and Ollama for the AI provider.
 
 ## Frontend
 
