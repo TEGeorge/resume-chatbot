@@ -68,7 +68,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     },
     // Ollama's cloud API cannot embed, so embeddings use their own endpoint (a local Ollama by default)
     embeddings: {
-      baseURL: env.OLLAMA_EMBED_BASE_URL || 'http://localhost:11434/api',
+      baseURL: env.OLLAMA_EMBED_BASE_URL || 'http://localhost:11435/api',
       model: env.OLLAMA_EMBED_MODEL || 'nomic-embed-text',
       apiKey: env.OLLAMA_EMBED_API_KEY || undefined,
     },

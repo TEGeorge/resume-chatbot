@@ -10,11 +10,8 @@
 #
 # To run only Ollama (for `pnpm dev` outside Docker):
 #   docker compose up -d ollama pull-embedding-model
-# The backend then reaches it at http://localhost:11434/api, which is its default
-# (OLLAMA_EMBED_BASE_URL). If you already run Ollama on this machine it holds port 11434;
-# publish this one elsewhere and point the backend at it:
-#   OLLAMA_PORT=11435 docker compose up -d
-#   OLLAMA_EMBED_BASE_URL=http://localhost:11435/api   (in backend/.env)
+# The backend then reaches it at http://localhost:11435/api, which is its default
+# (OLLAMA_EMBED_BASE_URL).
 
 services:
   frontend:
@@ -53,7 +50,7 @@ services:
     image: ollama/ollama:latest
     ports:
       # bound to this machine only
-      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+      - "127.0.0.1:${OLLAMA_PORT:-11435}:11434"
     volumes:
       - ollama:/root/.ollama
     healthcheck:
