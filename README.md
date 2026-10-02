@@ -18,6 +18,10 @@ Build a system that analyzes resumes against job descriptions. Upload a resume a
 
 [Excalidraw: resume-chatbot](https://excalidraw.com/resume-chatbot)
 
+## Running it
+
+See [SETUP.md](SETUP.md) to run the whole app with Docker Compose (`docker compose up -d --build`, then open http://localhost:4173).
+
 ## Development
 
 Built using Typescript, with React for the frontend and Hono for the backend. SQLite for the database and TBD on the AI provider.

@@ -32,6 +32,8 @@ Frontend (`cd frontend`):
 
 Setup: in `backend/`, copy `.env.example` to `.env` and fill in the values (credentials, Ollama URL, model and API key). `.env` files are git-ignored. The frontend needs no `.env`; the browser prompts for the backend credentials. Restart the dev server after editing `.env`.
 
+Docker (repo root, see `SETUP.md`): `docker compose up -d --build` runs the frontend (built and served by `vite preview` on :4173, proxying `/api` via `API_URL`), the backend (:3000, reads `backend/.env`, database in a volume) and a local Ollama for embeddings. The frontend image builds from the repo root because it type-checks backend files.
+
 Tests exist for the backend only (vitest); the frontend has none yet.
 
 ## Lessons learned
