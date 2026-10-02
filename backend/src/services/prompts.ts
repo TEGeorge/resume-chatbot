@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 // Prompts the app needs. Each must have an active version in the config.
-export const PROMPT_NAMES = ['chat', 'score'] as const
+export const PROMPT_NAMES = ['chat', 'score', 'summary'] as const
 export type PromptName = (typeof PROMPT_NAMES)[number]
 
 export interface Prompt {
@@ -57,7 +57,6 @@ export class PromptService {
     return new PromptService(library, active)
   }
 
-  // The active version of a prompt
   get(name: PromptName): Prompt {
     const version = this.active[name]!
     return { name, version, text: this.library[name]![version]! }
@@ -68,5 +67,5 @@ export class PromptService {
   }
 }
 
-// How a reply records which prompt produced it, e.g. "chat@v2"
+// How a reply records which prompt produced it, e.g. "chat@v1"
 export const promptLabel = (prompt: Prompt) => `${prompt.name}@${prompt.version}`

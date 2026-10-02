@@ -98,8 +98,7 @@ export interface Evaluation {
   result: Omit<ScoreOutput, 'globalScore'>
 }
 
-// Does the scoring itself: asks the model and works out the score, band and confidence.
-// It never touches the database; the route loads the documents and stores the result.
+// Asks the model for a score and works out the band and confidence.
 export class ScoringService {
   private readonly ollama: OllamaService
   private readonly prompts: PromptService

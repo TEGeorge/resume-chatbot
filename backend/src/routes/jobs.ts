@@ -9,12 +9,11 @@ import { DocumentFormSchema, readDocumentInput } from '../lib/document-input.js'
 import { RenameSchema } from '../lib/zod.js'
 import { ExtractError, MAX_UPLOAD_BYTES } from '../services/file-processing.js'
 import type { AppEnv } from '../services/index.js'
+import { RagError } from '../services/rag.js'
 
 const PREVIEW_CHARS = 200
-// Several postings share one prompt, so each is capped lower than a CV
 export const JOB_MAX_CHARS = 20_000
 
-// Unlike a resume, a job must be given a name
 const JobFormSchema = DocumentFormSchema.extend({ name: z.string().trim().min(1) })
 
 const JobSummarySchema = z.object({
@@ -23,9 +22,10 @@ const JobSummarySchema = z.object({
   fileName: z.string().nullable(),
   createdAt: z.date(),
   preview: z.string(),
+  summary: z.string().nullable(),
 })
 
-const JobSchema = JobSummarySchema.omit({ preview: true }).extend({ text: z.string() })
+const JobSchema = JobSummarySchema.omit({ preview: true, summary: true }).extend({ text: z.string() })
 
 const summaryColumns = {
   id: jobs.id,
@@ -33,6 +33,7 @@ const summaryColumns = {
   fileName: jobs.fileName,
   createdAt: jobs.createdAt,
   preview: sql<string>`substr(${jobs.text}, 1, ${PREVIEW_CHARS})`,
+  summary: jobs.summary,
 }
 
 export const jobRoutes = new Hono<AppEnv>()
@@ -92,6 +93,7 @@ export const jobRoutes = new Hono<AppEnv>()
         },
         400: { description: 'Send exactly one of file or text, and a name' },
         413: { description: 'File too large' },
+        502: { description: 'Embeddings or the model are unavailable, so the document was not saved' },
         415: { description: 'Unsupported file type' },
         422: { description: 'No readable text in the file' },
       },
@@ -115,18 +117,24 @@ export const jobRoutes = new Hono<AppEnv>()
         throw error
       }
 
-      const [created] = await db.insert(jobs).values(input).returning()
+      // Analyse before saving, so a failure stores nothing
+      const { rag } = c.get('services')
+      let analysis
+      try {
+        analysis = await rag.analyse(input.text, c.req.raw.signal)
+      } catch (error) {
+        if (error instanceof RagError) return c.json({ error: error.message }, error.status)
+        throw error
+      }
 
-      return c.json(
-        {
-          id: created.id,
-          name: created.name,
-          fileName: created.fileName,
-          createdAt: created.createdAt,
-          preview: created.text.slice(0, PREVIEW_CHARS),
-        },
-        201,
-      )
+      const created = db.transaction((tx) => {
+        const [row] = tx.insert(jobs).values({ ...input, summary: analysis.summary }).returning().all()
+        rag.saveChunks(tx, row!.id, analysis)
+        return row!
+      })
+
+      const [stored] = await db.select(summaryColumns).from(jobs).where(eq(jobs.id, created.id))
+      return c.json(stored!, 201)
     },
   )
   .patch(
@@ -158,6 +166,7 @@ export const jobRoutes = new Hono<AppEnv>()
           fileName: updated.fileName,
           createdAt: updated.createdAt,
           preview: updated.text.slice(0, PREVIEW_CHARS),
+          summary: updated.summary,
         },
         200,
       )
@@ -181,6 +190,7 @@ export const jobRoutes = new Hono<AppEnv>()
       const [inUse] = await db.select({ chatId: chatJobs.chatId }).from(chatJobs).where(eq(chatJobs.jobId, id)).limit(1)
       if (inUse) return c.json({ error: 'A chat uses this job' }, 409)
 
+      await c.get('services').rag.deleteChunks(id)
       await db.delete(jobs).where(eq(jobs.id, id))
       return c.body(null, 204)
     },

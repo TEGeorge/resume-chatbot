@@ -3,7 +3,7 @@ import type { ScoreOutput } from '../services/scoring.js'
 
 type ScoreResult = Omit<ScoreOutput, 'globalScore'>
 import { sql } from 'drizzle-orm'
-import { integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { blob, index, integer, primaryKey, real, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 export const resumes = sqliteTable('resumes', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -22,6 +22,7 @@ export const jobs = sqliteTable('jobs', {
   fileName: text('file_name'),
   mimeType: text('mime_type'),
   text: text('text').notNull(),
+  summary: text('summary'),
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .default(sql`(unixepoch())`),
@@ -46,7 +47,7 @@ export const messages = sqliteTable('messages', {
   role: text('role', { enum: ['user', 'assistant', 'system'] }).notNull(),
   // AI SDK UIMessage parts, stored as JSON
   parts: text('parts', { mode: 'json' }).$type<UIMessage['parts']>().notNull(),
-  // which prompt produced an assistant reply, e.g. "chat@v2" (null for user messages)
+  // which prompt produced an assistant reply, e.g. "chat@v1" (null for user messages)
   promptVersion: text('prompt_version'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' })
     .notNull()
@@ -88,3 +89,23 @@ export const scores = sqliteTable('scores', {
     .notNull()
     .default(sql`(unixepoch('subsec') * 1000)`),
 })
+
+export const chunks = sqliteTable(
+  'chunks',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    sourceType: text('source_type', { enum: ['job'] }).notNull(),
+    sourceId: text('source_id').notNull(),
+    position: integer('position').notNull(),
+    label: text('label').notNull(),
+    text: text('text').notNull(),
+    // the embedding model; vectors from different models are never compared
+    model: text('model').notNull(),
+    // little-endian float32 vector, read with sqlite-vec's functions
+    embedding: blob('embedding', { mode: 'buffer' }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (table) => [index('chunks_source_idx').on(table.sourceType, table.sourceId)],
+)

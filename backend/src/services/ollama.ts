@@ -2,6 +2,7 @@ import {
   APICallError,
   convertToModelMessages,
   generateObject,
+  generateText,
   NoObjectGeneratedError,
   streamText,
   type LanguageModel,
@@ -65,6 +66,18 @@ export class OllamaService {
     })
   }
 
+  async complete(input: { system: string; prompt: string; signal?: AbortSignal }): Promise<string> {
+    const { text } = await generateText({
+      model: this.model,
+      system: input.system,
+      prompt: input.prompt,
+      providerOptions: this.numCtx ? { ollama: { options: { num_ctx: this.numCtx } } } : undefined,
+      abortSignal: input.signal,
+      maxRetries: 1,
+    })
+    return text
+  }
+
   // One structured answer that must match `schema`. Models that ignore the requested
   // structure are asked again (`attempts` tries in total); other failures are not retried.
   async generateObject<T>(input: {
@@ -96,7 +109,6 @@ export class OllamaService {
     }
   }
 
-  // Message shown to the user when a stream fails
   describeError(error: unknown): string {
     console.error('model call failed', error)
     if (NoObjectGeneratedError.isInstance(error)) {

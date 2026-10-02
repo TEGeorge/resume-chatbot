@@ -1,0 +1,40 @@
+# Runs Ollama for the embedding model the chat uses to find the relevant requirements in job
+# postings. Ollama's cloud API cannot serve embeddings, so this runs one locally.
+#
+#   docker compose up -d        starts Ollama and downloads the model (first run only)
+#   docker compose down         stops it; the downloaded model is kept in a volume
+#
+# The backend reaches it at http://localhost:11434/api, which is its default
+# (OLLAMA_EMBED_BASE_URL). If you already run Ollama on this machine it holds port 11434;
+# publish this one elsewhere and point the backend at it:
+#   OLLAMA_PORT=11435 docker compose up -d
+#   OLLAMA_EMBED_BASE_URL=http://localhost:11435/api   (in backend/.env)
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      # bound to this machine only
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
+
+  # One-off job: downloads the embedding model into the volume, then exits.
+  pull-embedding-model:
+    image: ollama/ollama:latest
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["ollama", "pull", "${OLLAMA_EMBED_MODEL:-nomic-embed-text}"]
+    restart: "no"
+
+volumes:
+  ollama:

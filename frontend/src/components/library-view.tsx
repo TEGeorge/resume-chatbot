@@ -17,6 +17,8 @@ interface Item {
   fileName: string | null
   createdAt: string
   preview: string
+  // jobs only: written when the posting is indexed
+  summary?: string | null
 }
 
 interface ListProps {
@@ -90,7 +92,7 @@ function DocumentList({ noun, kind, items, isPending, isError, emptyText, nameRe
                     {new Date(item.createdAt).toLocaleDateString()}
                   </span>
                 </div>
-                <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{item.preview}</p>
+                <p className="mt-1 line-clamp-3 text-sm text-muted-foreground">{item.summary ?? item.preview}</p>
                 {del.isError && del.variables === item.id && (
                   <p className="mt-2 text-sm text-destructive">{del.error.message}</p>
                 )}

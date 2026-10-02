@@ -11,10 +11,10 @@ const ENV = {
 }
 
 describe('PromptService', () => {
-  const library = { chat: { v1: '<!-- note -->\nOld text', v2: 'New text' }, score: { v1: 'Score text' } }
+  const library = { chat: { v1: '<!-- note -->\nOld text', v2: 'New text' }, score: { v1: 'Score text' }, summary: { v1: 'Summary text' } }
 
   it('returns the active version', () => {
-    expect(new PromptService(library, { chat: 'v2', score: 'v1' }).get('chat')).toEqual({
+    expect(new PromptService(library, { chat: 'v2', score: 'v1', summary: 'v1' }).get('chat')).toEqual({
       name: 'chat',
       version: 'v2',
       text: 'New text',
@@ -22,21 +22,21 @@ describe('PromptService', () => {
   })
 
   it('strips the leading human-only comment', () => {
-    expect(new PromptService(library, { chat: 'v1', score: 'v1' }).get('chat').text).toBe('Old text')
+    expect(new PromptService(library, { chat: 'v1', score: 'v1', summary: 'v1' }).get('chat').text).toBe('Old text')
   })
 
   it('lists the available versions', () => {
-    expect(new PromptService(library, { chat: 'v2', score: 'v1' }).versions('chat')).toEqual(['v1', 'v2'])
+    expect(new PromptService(library, { chat: 'v2', score: 'v1', summary: 'v1' }).versions('chat')).toEqual(['v1', 'v2'])
   })
 
   it('refuses to start when the active version does not exist', () => {
-    expect(() => new PromptService(library, { chat: 'v9', score: 'v1' })).toThrow(
+    expect(() => new PromptService(library, { chat: 'v9', score: 'v1', summary: 'v1' })).toThrow(
       'Prompt "chat" has no version "v9". Available: v1, v2',
     )
   })
 
   it('refuses to start when no version is configured', () => {
-    expect(() => new PromptService(library, { score: 'v1' })).toThrow('No active version configured')
+    expect(() => new PromptService(library, { score: 'v1', summary: 'v1' })).toThrow('No active version configured')
   })
 })
 
