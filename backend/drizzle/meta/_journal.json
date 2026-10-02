@@ -43,6 +43,13 @@
       "when": 1790881284371,
       "tag": "0005_add_scores",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1790889296075,
+      "tag": "0006_add_chunks",
+      "breakpoints": true
     }
   ]
 }

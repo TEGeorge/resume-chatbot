@@ -1,4 +1,5 @@
 {
-  "chat": "v2",
-  "score": "v1"
+  "chat": "v1",
+  "score": "v1",
+  "summary": "v1"
 }

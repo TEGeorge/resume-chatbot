@@ -32,8 +32,8 @@ const job = { name: 'Backend role', text: 'Needs Go and Postgres.' }
 function serviceFor(model: ReturnType<typeof textModel> | MockLanguageModelV4) {
   const ollama = new OllamaService({ baseURL: 'http://unused', model: 'test-model' }, model)
   const prompts = new PromptService(
-    { chat: { v1: 'CHAT' }, score: { v1: 'SCORE-PROMPT' } },
-    { chat: 'v1', score: 'v1' },
+    { chat: { v1: 'CHAT' }, score: { v1: 'SCORE-PROMPT' }, summary: { v1: 'SUMMARY' } },
+    { chat: 'v1', score: 'v1', summary: 'v1' },
   )
   return new ScoringService(ollama, prompts)
 }
@@ -91,7 +91,7 @@ describe('ScoringService.evaluate', () => {
   })
 
   it('asks again when the model ignores the structure, then uses the good answer', async () => {
-    // the flat, repeated-key shape gemma once returned
+    // a flat object with a repeated key, a shape some models return instead of nested dimensions
     const flat = '{"cvMatch":5,"evidence":"supported","trajectoryFit":5,"globalScore":4.6}'
     const model = sequenceModel([flat, JSON.stringify(modelOutput())])
 

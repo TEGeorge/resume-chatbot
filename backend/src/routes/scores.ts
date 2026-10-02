@@ -91,7 +91,6 @@ export const scoreRoutes = new Hono<AppEnv>()
       const [job] = await db.select().from(jobs).where(eq(jobs.id, jobId)).limit(1)
       if (!job) return c.json({ error: 'Job not found' }, 400)
 
-      // the service scores; this route stores the result
       let evaluation
       try {
         evaluation = await c.get('services').scoring.evaluate({

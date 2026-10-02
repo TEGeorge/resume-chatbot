@@ -1,5 +1,7 @@
 import { APICallError } from 'ai'
 import { describe, expect, it } from 'vitest'
+import { db } from '../src/db/index.js'
+import { chats } from '../src/db/schema.js'
 import {
   authHeaders,
   createTestApp,
@@ -69,6 +71,18 @@ describe('POST /chat/:id/messages', () => {
     // the human-only leading comment is not sent to the model
     expect(system).not.toContain('first')
     expect(await storedPromptVersions(chatId)).toEqual([null, 'chat@v1'])
+  })
+
+  it('answers in a chat that has no resume or jobs, sending just the prompt', async () => {
+    const model = scriptedModel({ words: WORDS })
+    const app = createTestApp(model)
+    const [chat] = await db.insert(chats).values({ name: 'No documents' }).returning()
+
+    const { text, error } = await readStream(await sendMessage(app, chat!.id, 'Hello'))
+
+    expect(error).toBeUndefined()
+    expect(text).toBe(FULL_REPLY)
+    expect(systemPromptSent(model)).toBe('PROMPT-TWO')
   })
 
   it('keeps the part of the reply produced before the browser disconnected', async () => {

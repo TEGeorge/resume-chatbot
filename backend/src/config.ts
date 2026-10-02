@@ -10,8 +10,13 @@ export interface OllamaConfig {
   numCtx?: number
 }
 
+export interface EmbeddingConfig {
+  baseURL: string
+  model: string
+  apiKey?: string
+}
+
 export interface PromptsConfig {
-  // folder holding prompts/<name>/<version>.md
   dir: string
   // prompt name -> active version
   active: Record<string, string>
@@ -20,6 +25,7 @@ export interface PromptsConfig {
 export interface Config {
   auth: { username: string; password: string }
   ollama: OllamaConfig
+  embeddings: EmbeddingConfig
   prompts: PromptsConfig
 }
 
@@ -42,7 +48,6 @@ function loadPromptsConfig(env: NodeJS.ProcessEnv): PromptsConfig {
   return { dir: join(backendRoot, 'prompts'), active }
 }
 
-// Reads and validates the environment once, at startup
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const { BASIC_AUTH_USERNAME, BASIC_AUTH_PASSWORD, OLLAMA_BASE_URL, OLLAMA_MODEL } = env
 
@@ -65,6 +70,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       model: OLLAMA_MODEL,
       apiKey: env.OLLAMA_API_KEY || undefined,
       numCtx,
+    },
+    // Ollama's cloud API cannot embed, so embeddings use their own endpoint (a local Ollama by default)
+    embeddings: {
+      baseURL: env.OLLAMA_EMBED_BASE_URL || 'http://localhost:11434/api',
+      model: env.OLLAMA_EMBED_MODEL || 'nomic-embed-text',
+      apiKey: env.OLLAMA_EMBED_API_KEY || undefined,
     },
     prompts: loadPromptsConfig(env),
   }
