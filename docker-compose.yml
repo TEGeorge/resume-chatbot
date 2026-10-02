@@ -1,21 +1,56 @@
-# Runs Ollama for the embedding model the chat uses to find the relevant requirements in job
-# postings. Ollama's cloud API cannot serve embeddings, so this runs one locally.
+# Runs the whole app: the frontend (vite preview), the backend API, and a local Ollama
+# for the embedding model the chat uses to find the relevant requirements in job
+# postings (Ollama's cloud API cannot serve embeddings, so this runs one locally).
+# Chat replies still come from the Ollama API configured in backend/.env.
+# See Setup in README.md.
 #
-#   docker compose up -d        starts Ollama and downloads the model (first run only)
-#   docker compose down         stops it; the downloaded model is kept in a volume
+#   docker compose up -d --build   builds and starts everything (first run downloads the
+#                                  embedding model); open http://localhost:4173
+#   docker compose down            stops it; the database and model are kept in volumes
 #
-# The backend reaches it at http://localhost:11434/api, which is its default
-# (OLLAMA_EMBED_BASE_URL). If you already run Ollama on this machine it holds port 11434;
-# publish this one elsewhere and point the backend at it:
-#   OLLAMA_PORT=11435 docker compose up -d
-#   OLLAMA_EMBED_BASE_URL=http://localhost:11435/api   (in backend/.env)
+# To run only Ollama (for `pnpm dev` outside Docker):
+#   docker compose up -d ollama pull-embedding-model
+# The backend then reaches it at http://localhost:11435/api, which is its default
+# (OLLAMA_EMBED_BASE_URL).
 
 services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-4173}:4173"
+    environment:
+      API_URL: http://backend:3000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    env_file: backend/.env
+    environment:
+      # these override backend/.env so the containers reach each other
+      OLLAMA_EMBED_BASE_URL: http://ollama:11434/api
+      DATABASE_URL: /data/app.db
+      PORT: "3000"
+    ports:
+      # the API and its docs (/swagger); the frontend reaches it over the compose network
+      - "127.0.0.1:${BACKEND_PORT:-3000}:3000"
+    volumes:
+      - data:/data
+    depends_on:
+      ollama:
+        condition: service_healthy
+      pull-embedding-model:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   ollama:
     image: ollama/ollama:latest
     ports:
       # bound to this machine only
-      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+      - "127.0.0.1:${OLLAMA_PORT:-11435}:11434"
     volumes:
       - ollama:/root/.ollama
     healthcheck:
@@ -37,4 +72,5 @@ services:
     restart: "no"
 
 volumes:
+  data:
   ollama:

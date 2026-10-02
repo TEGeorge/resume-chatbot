@@ -14,8 +14,6 @@ import { RagService } from '../src/services/rag.js'
 import { ScoringService } from '../src/services/scoring.js'
 import { SummaryService } from '../src/services/summaries.js'
 
-const AUTH = { Authorization: `Basic ${Buffer.from('t:t').toString('base64')}` }
-
 let migrated = false
 
 // A model that streams `words` one by one, `delayMs` apart (or fails instead)
@@ -146,7 +144,6 @@ export function createTestApp(
     { chat: options.promptVersion ?? 'v2', score: 'v1', summary: 'v1' },
   )
   return createApp({
-    auth: { username: 't', password: 't' },
     services: {
       ollama,
       files: new FileProcessingService(),
@@ -164,7 +161,7 @@ export function createTestApp(
 type TestApp = ReturnType<typeof createTestApp>
 
 export function api(app: TestApp, path: string, init: RequestInit = {}) {
-  return app.request(path, { ...init, headers: { ...AUTH, ...init.headers } })
+  return app.request(path, init)
 }
 
 // A resume and a job, created through the API
@@ -279,8 +276,6 @@ export async function listen(app: TestApp) {
     })
   })
 }
-
-export { AUTH as authHeaders }
 
 // A model that answers once (not streamed) with this text, for structured output
 export function textModel(text: string) {

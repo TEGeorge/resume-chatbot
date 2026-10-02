@@ -23,7 +23,6 @@ export interface PromptsConfig {
 }
 
 export interface Config {
-  auth: { username: string; password: string }
   ollama: OllamaConfig
   embeddings: EmbeddingConfig
   prompts: PromptsConfig
@@ -49,11 +48,8 @@ function loadPromptsConfig(env: NodeJS.ProcessEnv): PromptsConfig {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const { BASIC_AUTH_USERNAME, BASIC_AUTH_PASSWORD, OLLAMA_BASE_URL, OLLAMA_MODEL } = env
+  const { OLLAMA_BASE_URL, OLLAMA_MODEL } = env
 
-  if (!BASIC_AUTH_USERNAME || !BASIC_AUTH_PASSWORD) {
-    throw new Error('BASIC_AUTH_USERNAME and BASIC_AUTH_PASSWORD must be set')
-  }
   if (!OLLAMA_BASE_URL || !OLLAMA_MODEL) {
     throw new Error('OLLAMA_BASE_URL and OLLAMA_MODEL must be set')
   }
@@ -64,7 +60,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
 
   return {
-    auth: { username: BASIC_AUTH_USERNAME, password: BASIC_AUTH_PASSWORD },
     ollama: {
       baseURL: OLLAMA_BASE_URL,
       model: OLLAMA_MODEL,
@@ -73,7 +68,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     },
     // Ollama's cloud API cannot embed, so embeddings use their own endpoint (a local Ollama by default)
     embeddings: {
-      baseURL: env.OLLAMA_EMBED_BASE_URL || 'http://localhost:11434/api',
+      baseURL: env.OLLAMA_EMBED_BASE_URL || 'http://localhost:11435/api',
       model: env.OLLAMA_EMBED_MODEL || 'nomic-embed-text',
       apiKey: env.OLLAMA_EMBED_API_KEY || undefined,
     },

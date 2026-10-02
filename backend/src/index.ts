@@ -5,7 +5,7 @@ import { runMigrations } from './db/index.js'
 import { createServices } from './services/index.js'
 
 const config = loadConfig()
-const app = createApp({ auth: config.auth, services: createServices(config) })
+const app = createApp({ services: createServices(config) })
 
 runMigrations()
 

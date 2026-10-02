@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { db } from '../src/db/index.js'
 import { chats } from '../src/db/schema.js'
 import {
-  authHeaders,
   createTestApp,
   listen,
   readStream,
@@ -121,7 +120,7 @@ describe('POST /chat/:id/messages', () => {
       const controller = new AbortController()
       const res = await fetch(`${server.url}/chat/${chatId}/messages`, {
         method: 'POST',
-        headers: { ...authHeaders, 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ parts: [{ type: 'text', text: 'Hello' }] }),
         signal: controller.signal,
       })
