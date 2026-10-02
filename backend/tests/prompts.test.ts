@@ -4,8 +4,6 @@ import { ScoreOutputSchema } from '../src/services/scoring.js'
 import { PromptService } from '../src/services/prompts.js'
 
 const ENV = {
-  BASIC_AUTH_USERNAME: 'u',
-  BASIC_AUTH_PASSWORD: 'p',
   OLLAMA_BASE_URL: 'http://unused',
   OLLAMA_MODEL: 'unused',
 }

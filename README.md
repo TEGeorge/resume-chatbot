@@ -34,7 +34,6 @@ cp backend/.env.example backend/.env
 
 Edit `backend/.env`:
 
-- `BASIC_AUTH_USERNAME` / `BASIC_AUTH_PASSWORD`: the login the browser asks for. Change them from the defaults.
 - `OLLAMA_API_KEY`: the key from step 1.
 - `OLLAMA_MODEL`: the chat model (default `gemma4:31b`).
 
@@ -59,7 +58,7 @@ This starts four services:
 
 Compose points the backend at the `ollama` container and keeps the database in a volume, overriding those settings in `backend/.env`. The first run downloads the embedding model, so it takes a few minutes; the backend waits for it before starting.
 
-Open http://localhost:4173 and sign in with the `BASIC_AUTH_*` values from `backend/.env`.
+Open http://localhost:4173.
 
 ```bash
 docker compose logs -f backend    # follow the backend logs
@@ -94,13 +93,12 @@ pnpm install
 pnpm dev          # http://localhost:5173, proxies /api to the backend
 ```
 
-Open http://localhost:5173 and sign in with the `BASIC_AUTH_*` values. Migrations run when the backend starts, and the database is `backend/local.db`. Restart `pnpm dev` in `backend/` after editing `.env`. Run `pnpm test` in `backend/` for the tests.
+Open http://localhost:5173. Migrations run when the backend starts, and the database is `backend/local.db`. Restart `pnpm dev` in `backend/` after editing `.env`. Run `pnpm test` in `backend/` for the tests.
 
 ### Troubleshooting
 
 - **Adding a job fails with "Could not index the job".** The embedding model is not available. With Docker, check `docker compose logs pull-embedding-model` and run `docker compose up -d` again to retry the download. Locally, check that Ollama is running and that `ollama list` shows `nomic-embed-text`.
 - **Chat replies fail.** Check `OLLAMA_API_KEY`, `OLLAMA_BASE_URL` and `OLLAMA_MODEL` in `backend/.env`, then restart the backend.
-- **The browser keeps asking for the login.** The credentials don't match `backend/.env`.
 
 ## Development
 
@@ -123,16 +121,16 @@ pnpm install
 pnpm dev               # http://localhost:5173
 ```
 
-The frontend has no credentials of its own. The browser shows its Basic Auth prompt on first use (enter the `BASIC_AUTH_*` values from `backend/.env`) and remembers the login. The Vite dev server proxies `/api/*` to the backend (`http://localhost:3000`, override with `API_URL`) so the browser sees a single origin, which is what lets that prompt and stored login apply to every request. API calls use the typed Hono RPC client in `src/lib/api.ts`.
+The Vite dev server proxies `/api/*` to the backend (`http://localhost:3000`, override with `API_URL`) so the browser sees a single origin and needs no CORS setup. API calls use the typed Hono RPC client in `src/lib/api.ts`.
 
 # Backend
 
-Hono used for a lightweight, edge supported runtime. Using Drizzle for the ORM with SQLite to keep the environment simple, Hono basic auth. Chat replies come from an Ollama API (`ollama-ai-provider-v2` with the Vercel AI SDK).
+Hono used for a lightweight, edge supported runtime. Using Drizzle for the ORM with SQLite to keep the environment simple. The API has no authentication, so only run it locally or behind something that adds it. Chat replies come from an Ollama API (`ollama-ai-provider-v2` with the Vercel AI SDK).
 
 Setup and run (from `backend/`):
 
 ```bash
-cp .env.example .env   # Basic Auth credentials and Ollama settings
+cp .env.example .env   # Ollama settings
 pnpm install
 pnpm dev               # http://localhost:3000
 ```
