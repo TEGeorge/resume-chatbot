@@ -2,7 +2,7 @@
 # for the embedding model the chat uses to find the relevant requirements in job
 # postings (Ollama's cloud API cannot serve embeddings, so this runs one locally).
 # Chat replies still come from the Ollama API configured in backend/.env.
-# See SETUP.md.
+# See Setup in README.md.
 #
 #   docker compose up -d --build   builds and starts everything (first run downloads the
 #                                  embedding model); open http://localhost:4173

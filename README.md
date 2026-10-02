@@ -18,9 +18,89 @@ Build a system that analyzes resumes against job descriptions. Upload a resume a
 
 [Excalidraw: resume-chatbot](https://excalidraw.com/resume-chatbot)
 
-## Running it
+## Setup
 
-See [SETUP.md](SETUP.md) to run the whole app with Docker Compose (`docker compose up -d --build`, then open http://localhost:4173).
+You need an Ollama API key for chat replies, and either Docker (with Compose v2) or Node.js with pnpm.
+
+### 1. Get an Ollama API key
+
+<!-- TODO: add instructions for getting an Ollama API key -->
+
+### 2. Configure the backend
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Edit `backend/.env`:
+
+- `BASIC_AUTH_USERNAME` / `BASIC_AUTH_PASSWORD`: the login the browser asks for. Change them from the defaults.
+- `OLLAMA_API_KEY`: the key from step 1.
+- `OLLAMA_MODEL`: the chat model (default `gemma4:31b`).
+
+Leave the embedding and database settings as they are unless you need something different (see the Backend section below).
+
+### 3a. Run with Docker (demo)
+
+From the repository root:
+
+```bash
+docker compose up -d --build
+```
+
+This starts four services:
+
+| Service | What it does | Address |
+| --- | --- | --- |
+| `frontend` | The built UI served by `vite preview`, which proxies `/api` to the backend | http://localhost:4173 |
+| `backend` | The API, with the SQLite database in the `data` volume | http://localhost:3000 (docs at `/swagger`) |
+| `ollama` | Local Ollama for embeddings (Ollama's cloud API cannot embed) | http://localhost:11434 |
+| `pull-embedding-model` | One-off job that downloads `nomic-embed-text`, then exits | |
+
+Compose points the backend at the `ollama` container and keeps the database in a volume, overriding those settings in `backend/.env`. The first run downloads the embedding model, so it takes a few minutes; the backend waits for it before starting.
+
+Open http://localhost:4173 and sign in with the `BASIC_AUTH_*` values from `backend/.env`.
+
+```bash
+docker compose logs -f backend    # follow the backend logs
+docker compose up -d --build      # rebuild after pulling changes or editing backend/.env
+docker compose down               # stop; the database and model stay in volumes
+docker compose down -v            # stop and delete the database and model
+```
+
+If a port is in use, change it with `FRONTEND_PORT`, `BACKEND_PORT` or `OLLAMA_PORT`, for example `FRONTEND_PORT=8080 docker compose up -d`.
+
+### 3b. Run locally for development (pnpm dev)
+
+Requires Node.js 22+ and pnpm. The backend and frontend are separate pnpm packages, so install and run each from its own directory, in separate terminals.
+
+Embeddings still need a local Ollama. Either run only that part of the compose file:
+
+```bash
+docker compose up -d ollama pull-embedding-model
+```
+
+or, with Ollama installed natively, run `ollama pull nomic-embed-text`. Both serve it at `http://localhost:11434/api`, the backend's default.
+
+```bash
+# terminal 1
+cd backend
+pnpm install
+pnpm dev          # http://localhost:3000, restarts on file changes
+
+# terminal 2
+cd frontend
+pnpm install
+pnpm dev          # http://localhost:5173, proxies /api to the backend
+```
+
+Open http://localhost:5173 and sign in with the `BASIC_AUTH_*` values. Migrations run when the backend starts, and the database is `backend/local.db`. Restart `pnpm dev` in `backend/` after editing `.env`. Run `pnpm test` in `backend/` for the tests.
+
+### Troubleshooting
+
+- **Adding a job fails with "Could not index the job".** The embedding model is not available. With Docker, check `docker compose logs pull-embedding-model` and run `docker compose up -d` again to retry the download. Locally, check that Ollama is running and that `ollama list` shows `nomic-embed-text`.
+- **Chat replies fail.** Check `OLLAMA_API_KEY`, `OLLAMA_BASE_URL` and `OLLAMA_MODEL` in `backend/.env`, then restart the backend.
+- **The browser keeps asking for the login.** The credentials don't match `backend/.env`.
 
 ## Development
 
